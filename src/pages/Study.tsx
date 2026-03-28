@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import useAppStore from '@/stores/useAppStore'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { MessageSquareQuestion, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { HelpCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export default function Study() {
@@ -85,7 +85,7 @@ export default function Study() {
           <div className="w-full flex flex-col items-center justify-center perspective-1000 px-4">
             <div
               className={cn(
-                'relative w-full max-w-2xl aspect-[4/3] md:aspect-[2/1] transition-transform duration-[600ms] preserve-3d cursor-pointer shadow-lg hover:shadow-xl rounded-3xl',
+                'relative w-full max-w-2xl aspect-[4/3] md:aspect-[2/1] transition-transform duration-500 preserve-3d cursor-pointer shadow-lg hover:shadow-xl rounded-3xl',
                 isFlipped && 'rotate-y-180',
               )}
               onClick={() => !isFlipped && setIsFlipped(true)}
@@ -119,7 +119,7 @@ export default function Study() {
                   className="absolute top-6 right-6 text-muted-foreground hover:text-primary bg-secondary/50"
                   onClick={handleNeedHelp}
                 >
-                  <MessageSquareQuestion className="h-4 w-4 md:mr-2" />{' '}
+                  <HelpCircle className="h-4 w-4 md:mr-2" />{' '}
                   <span className="hidden md:inline">Explicação com IA</span>
                 </Button>
               </div>
