@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Home, Layers, MessageSquare, Settings, Zap, Moon, Sun } from 'lucide-react'
+import { Home, Layers, MessageSquare, Settings, Zap, Moon, Sun, Bot } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -34,6 +34,7 @@ export default function Layout() {
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: Layers, label: 'Flashcards', path: '/flashcards' },
     { icon: MessageSquare, label: 'Consultoria IA', path: '/consultoria' },
+    { icon: Bot, label: 'Chat de Flashcards', path: '/flashcards-chat' },
     { icon: Settings, label: 'Configurações', path: '/settings' },
   ]
 

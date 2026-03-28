@@ -9,6 +9,9 @@ import Flashcards from './pages/Flashcards'
 import Study from './pages/Study'
 import Consultoria from './pages/Consultoria'
 import Settings from './pages/Settings'
+import Register from './pages/Register'
+import Onboarding from './pages/Onboarding'
+import FlashcardsChat from './pages/FlashcardsChat'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -18,11 +21,14 @@ const App = () => (
         <Toaster />
         <Sonner />
         <Routes>
+          <Route path="/auth/register" element={<Register />} />
+          <Route path="/onboarding" element={<Onboarding />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
             <Route path="/flashcards" element={<Flashcards />} />
             <Route path="/study/:subjectId" element={<Study />} />
             <Route path="/consultoria" element={<Consultoria />} />
+            <Route path="/flashcards-chat" element={<FlashcardsChat />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
           <Route path="*" element={<NotFound />} />
