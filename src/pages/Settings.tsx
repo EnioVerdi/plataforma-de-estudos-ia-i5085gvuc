@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
@@ -11,15 +12,54 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { BellRing, Plane, User, Lock, Mail } from 'lucide-react'
+import { BellRing, Plane, User, LogOut } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase/client'
+import { useNavigate } from 'react-router-dom'
 
 export default function Settings() {
-  const handleSave = () => {
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
+  const [profile, setProfile] = useState({ name: '' })
+  const [settings, setSettings] = useState({
+    email_enabled: true,
+    preferred_time: '08:00',
+    frequency: 'daily',
+    vacation_mode: false,
+  })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) return
+      const [profRes, setRes] = await Promise.all([
+        supabase.from('profiles').select('name').eq('id', user.id).single(),
+        supabase.from('reminder_settings').select('*').eq('user_id', user.id).single(),
+      ])
+      if (profRes.data) setProfile({ name: profRes.data.name || '' })
+      if (setRes.data) setSettings(setRes.data)
+    }
+    load()
+  }, [user])
+
+  const handleSave = async () => {
+    if (!user) return
+    setLoading(true)
+    await Promise.all([
+      supabase.from('profiles').update({ name: profile.name }).eq('id', user.id),
+      supabase.from('reminder_settings').upsert({ user_id: user.id, ...settings }),
+    ])
+    setLoading(false)
     toast({
       title: 'Configurações salvas',
       description: 'Suas preferências foram atualizadas com sucesso.',
     })
+  }
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/auth/register')
   }
 
   return (
@@ -45,29 +85,39 @@ export default function Settings() {
           <CardContent className="space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label className="text-base">E-mail Diário</Label>
+                <Label className="text-base">E-mail de Lembretes</Label>
                 <p className="text-sm text-muted-foreground">
-                  Receba um resumo das revisões pendentes do dia.
+                  Receba um resumo das revisões pendentes.
                 </p>
               </div>
-              <Switch defaultChecked />
+              <Switch
+                checked={settings.email_enabled}
+                onCheckedChange={(v) => setSettings({ ...settings, email_enabled: v })}
+              />
             </div>
             <Separator />
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Horário preferido</Label>
-                <Input type="time" defaultValue="08:00" className="w-full" />
+                <Input
+                  type="time"
+                  value={settings.preferred_time}
+                  onChange={(e) => setSettings({ ...settings, preferred_time: e.target.value })}
+                  className="w-full"
+                />
               </div>
               <div className="space-y-2">
-                <Label>Frequência extra</Label>
-                <Select defaultValue="none">
+                <Label>Frequência</Label>
+                <Select
+                  value={settings.frequency}
+                  onValueChange={(v) => setSettings({ ...settings, frequency: v })}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Apenas o resumo matinal</SelectItem>
-                    <SelectItem value="urgent">Alertas de revisões urgentes</SelectItem>
-                    <SelectItem value="weekly">Relatório semanal aos domingos</SelectItem>
+                    <SelectItem value="daily">Diariamente</SelectItem>
+                    <SelectItem value="weekly">Semanalmente</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -95,29 +145,42 @@ export default function Settings() {
                   Ideal para semanas de provas ou descanso prolongado.
                 </p>
               </div>
-              <Switch />
+              <Switch
+                checked={settings.vacation_mode}
+                onCheckedChange={(v) => setSettings({ ...settings, vacation_mode: v })}
+              />
             </div>
           </CardContent>
         </Card>
 
         <Card className="border-0 ring-1 ring-border shadow-sm">
           <CardHeader>
-            <div className="flex items-center gap-2">
-              <User className="h-5 w-5 text-emerald-500" />
-              <CardTitle>Dados do Perfil</CardTitle>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <User className="h-5 w-5 text-emerald-500" />
+                <CardTitle>Dados do Perfil</CardTitle>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSignOut}
+                className="text-red-500 hover:text-red-600 hover:bg-red-50"
+              >
+                <LogOut className="h-4 w-4 mr-2" /> Sair da Conta
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>Nome Completo</Label>
-              <Input defaultValue="Aluno Dedicado" />
+              <Input value={profile.name} onChange={(e) => setProfile({ name: e.target.value })} />
             </div>
             <div className="space-y-2">
               <Label>E-mail da Conta</Label>
-              <Input defaultValue="aluno@estudoia.com" disabled className="bg-muted" />
+              <Input value={user?.email || ''} disabled className="bg-muted" />
             </div>
-            <Button onClick={handleSave} className="mt-2">
-              Salvar Alterações
+            <Button onClick={handleSave} disabled={loading} className="mt-2">
+              {loading ? 'Salvando...' : 'Salvar Alterações'}
             </Button>
           </CardContent>
         </Card>

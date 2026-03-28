@@ -9,10 +9,14 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase/client'
 
 export default function Onboarding() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [step, setStep] = useState(1)
+  const [loading, setLoading] = useState(false)
   const [data, setData] = useState({
     name: '',
     level: '',
@@ -30,11 +34,31 @@ export default function Onboarding() {
 
   const update = (key: string, value: any) => setData((p) => ({ ...p, [key]: value }))
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (step < 4) setStep(step + 1)
     else {
-      localStorage.setItem('estudoia_onboarding', JSON.stringify(data))
+      setLoading(true)
+      if (user) {
+        await supabase
+          .from('profiles')
+          .update({
+            onboarding_completed: true,
+            name: data.name,
+            study_goals: [data.goal],
+            learning_style: [data.style],
+            preferred_subjects: data.disciplines,
+          })
+          .eq('id', user.id)
+
+        await supabase.from('reminder_settings').insert({
+          user_id: user.id,
+          email_enabled: data.reminders !== 'Não',
+          preferred_time: data.time || '08:00',
+          frequency: data.reminders.includes('diariamente') ? 'daily' : 'weekly',
+        })
+      }
       toast.success(`Bem-vindo, ${data.name || 'Estudante'}!`)
+      setLoading(false)
       navigate('/')
     }
   }
@@ -288,8 +312,14 @@ export default function Onboarding() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
           </Button>
-          <Button onClick={handleNext} className={step === 4 ? 'bg-primary' : ''}>
-            {step === 4 ? (
+          <Button
+            onClick={handleNext}
+            disabled={loading}
+            className={step === 4 ? 'bg-primary' : ''}
+          >
+            {loading ? (
+              'Salvando...'
+            ) : step === 4 ? (
               <>
                 Concluir e Entrar
                 <CheckCircle2 className="w-4 h-4 ml-2" />

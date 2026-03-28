@@ -6,8 +6,11 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Send, Sparkles, BookOpen, BrainCircuit, BotMessageSquare, User } from 'lucide-react'
 import useAppStore from '@/stores/useAppStore'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase/client'
 
 export default function Consultoria() {
+  const { user } = useAuth()
   const { chatContext, setChatContext } = useAppStore()
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; content: string }[]>([
     {
@@ -21,23 +24,42 @@ export default function Consultoria() {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    const loadHistory = async () => {
+      if (!user) return
+      const { data } = await supabase
+        .from('consultation_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: true })
+      if (data && data.length > 0) {
+        const history = data.flatMap((s: any) => [
+          { role: 'user' as const, content: s.query },
+          { role: 'ai' as const, content: s.response },
+        ])
+        setMessages((prev) => [...prev, ...history])
+      }
+    }
+    loadHistory()
+  }, [user])
+
+  useEffect(() => {
     if (chatContext) {
       setMessages((prev) => [...prev, { role: 'user', content: chatContext }])
       setChatContext('')
       setIsTyping(true)
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: 'ai',
-            content:
-              'Entendi a sua dúvida! Vamos simplificar:\n\nImagine que a célula é uma pequena cidade. A organela em questão age como a **usina de energia** dessa cidade. Ela pega os "combustíveis" e transforma em energia elétrica (ATP) para que tudo continue funcionando.\n\nFicou mais claro agora?',
-          },
-        ])
+      setTimeout(async () => {
+        const aiResponse =
+          'Entendi a sua dúvida! Vamos simplificar:\n\nImagine que a célula é uma pequena cidade. A organela em questão age como a **usina de energia** dessa cidade. Ela pega os "combustíveis" e transforma em energia elétrica (ATP) para que tudo continue funcionando.\n\nFicou mais claro agora?'
+        setMessages((prev) => [...prev, { role: 'ai', content: aiResponse }])
         setIsTyping(false)
+        if (user) {
+          await supabase
+            .from('consultation_sessions')
+            .insert({ user_id: user.id, query: chatContext, response: aiResponse })
+        }
       }, 1800)
     }
-  }, [chatContext, setChatContext])
+  }, [chatContext, setChatContext, user])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -47,22 +69,23 @@ export default function Consultoria() {
 
   const handleSend = (e?: React.FormEvent) => {
     e?.preventDefault()
-    if (!input.trim()) return
+    const text = input.trim()
+    if (!text) return
 
-    setMessages((prev) => [...prev, { role: 'user', content: input }])
+    setMessages((prev) => [...prev, { role: 'user', content: text }])
     setInput('')
     setIsTyping(true)
 
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'ai',
-          content:
-            'Ótima pergunta. O conceito central aqui é a retenção espaçada. Revisar no momento exato em que você está prestes a esquecer fortalece as conexões neurais. Recomendo criar 3 flashcards práticos sobre isso.',
-        },
-      ])
+    setTimeout(async () => {
+      const aiResponse =
+        'Ótima pergunta. O conceito central aqui é a retenção espaçada. Revisar no momento exato em que você está prestes a esquecer fortalece as conexões neurais. Recomendo criar 3 flashcards práticos sobre isso.'
+      setMessages((prev) => [...prev, { role: 'ai', content: aiResponse }])
       setIsTyping(false)
+      if (user) {
+        await supabase
+          .from('consultation_sessions')
+          .insert({ user_id: user.id, query: text, response: aiResponse })
+      }
     }, 1500)
   }
 

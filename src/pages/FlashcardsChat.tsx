@@ -5,6 +5,8 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Bot, Paperclip, Send, Search, MessageSquarePlus, PlusCircle } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase/client'
 
 interface Message {
   id: string
@@ -27,6 +29,7 @@ const QUICK_CHIPS = [
 ]
 
 export default function FlashcardsChat() {
+  const { user } = useAuth()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'initial',
@@ -38,6 +41,25 @@ export default function FlashcardsChat() {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!user) return
+      const { data } = await supabase
+        .from('flashcard_chat_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: true })
+      if (data && data.length > 0) {
+        const history = data.flatMap((s: any) => [
+          { id: s.id + '-user', role: 'user' as const, content: s.query },
+          { id: s.id + '-ai', role: 'ai' as const, content: s.response },
+        ])
+        setMessages((prev) => [...prev, ...history])
+      }
+    }
+    loadHistory()
+  }, [user])
 
   useEffect(() => {
     if (scrollRef.current) {
