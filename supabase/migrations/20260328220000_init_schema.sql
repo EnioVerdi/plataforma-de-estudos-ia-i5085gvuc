@@ -24,13 +24,13 @@ CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE TO au
 
 -- Trigger for profile creation
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger AS $
+RETURNS trigger AS $$
 BEGIN
   INSERT INTO public.profiles (id, email)
   VALUES (NEW.id, NEW.email);
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -157,7 +157,7 @@ CREATE POLICY "Users can manage own progress metrics" ON public.progress_metrics
 
 
 -- Seed user
-DO $
+DO $$
 DECLARE
   new_user_id uuid;
 BEGIN
@@ -182,4 +182,4 @@ BEGIN
       '', '', '', '', '', NULL, '', '', ''
     );
   END IF;
-END $;
+END $$;
