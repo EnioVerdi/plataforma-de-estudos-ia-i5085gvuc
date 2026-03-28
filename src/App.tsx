@@ -11,6 +11,7 @@ import Study from './pages/Study'
 import Consultoria from './pages/Consultoria'
 import Settings from './pages/Settings'
 import Register from './pages/Register'
+import CheckEmail from './pages/auth/CheckEmail'
 import Onboarding from './pages/Onboarding'
 import FlashcardsChat from './pages/FlashcardsChat'
 import NotFound from './pages/NotFound'
@@ -31,6 +32,7 @@ const App = () => (
           <Sonner />
           <Routes>
             <Route path="/auth/register" element={<Register />} />
+            <Route path="/auth/check-email" element={<CheckEmail />} />
             <Route
               path="/onboarding"
               element={

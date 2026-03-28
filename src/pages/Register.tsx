@@ -31,8 +31,7 @@ export default function Register() {
       const { error } = await signUp(data.email, data.password)
       if (error) toast.error(error.message)
       else {
-        toast.success('Conta criada com sucesso!')
-        navigate('/onboarding')
+        navigate('/auth/check-email')
       }
     }
     setLoading(false)
@@ -92,11 +91,17 @@ export default function Register() {
           )}
 
           {!isLogin && (
-            <div className="flex items-center space-x-2 pt-2">
-              <Checkbox id="terms" required />
-              <Label htmlFor="terms" className="text-sm font-normal">
-                Li e concordo com os termos
-              </Label>
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox id="terms" required />
+                <Label htmlFor="terms" className="text-sm font-normal">
+                  Li e concordo com os termos
+                </Label>
+              </div>
+              <div className="text-xs text-muted-foreground bg-muted p-3 rounded-md border border-border/50 text-center">
+                Um email de confirmação será enviado para o seu endereço. Verifique sua caixa de
+                entrada para ativar sua conta.
+              </div>
             </div>
           )}
 

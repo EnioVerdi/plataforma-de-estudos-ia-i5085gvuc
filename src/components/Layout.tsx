@@ -21,9 +21,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Home, Layers, MessageSquare, Settings, Zap, Moon, Sun, Bot } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function Layout() {
   const location = useLocation()
+  const { user } = useAuth()
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
@@ -38,7 +40,9 @@ export default function Layout() {
     { icon: Settings, label: 'Configurações', path: '/settings' },
   ]
 
-  const title = navItems.find((n) => n.path === location.pathname)?.label || 'EstudoIA'
+  const title = navItems.find((n) => n.path === location.pathname)?.label || 'CONSULTOR IA'
+
+  const initials = user?.email?.substring(0, 2).toUpperCase() || 'US'
 
   return (
     <SidebarProvider>
@@ -47,7 +51,7 @@ export default function Layout() {
           <SidebarHeader className="p-6">
             <div className="flex items-center gap-3 font-bold text-2xl text-primary">
               <Zap className="h-6 w-6 fill-primary" />
-              <span>EstudoIA</span>
+              <span>CONSULTOR IA</span>
             </div>
           </SidebarHeader>
           <SidebarContent className="px-3">
@@ -89,9 +93,10 @@ export default function Layout() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button className="outline-none ring-0">
-                    <Avatar className="h-9 w-9 border-2 border-primary/20 cursor-pointer">
-                      <AvatarImage src="https://img.usecurling.com/ppl/thumbnail?gender=male&seed=1" />
-                      <AvatarFallback>AL</AvatarFallback>
+                    <Avatar className="h-9 w-9 border-2 border-primary/20 cursor-pointer bg-primary/10">
+                      <AvatarFallback className="bg-transparent text-primary font-semibold">
+                        {initials}
+                      </AvatarFallback>
                     </Avatar>
                   </button>
                 </DropdownMenuTrigger>
