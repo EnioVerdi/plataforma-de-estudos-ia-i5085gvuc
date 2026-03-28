@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,10 +28,11 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Label } from '@/components/ui/label'
-import { Sparkles, Plus, Play, Layers } from 'lucide-react'
+import { Sparkles, Plus, Play } from 'lucide-react'
 import useAppStore from '@/stores/useAppStore'
 import { Link } from 'react-router-dom'
 import { toast } from '@/hooks/use-toast'
+import { getSubjectConfig } from '@/lib/subjects'
 
 export default function Flashcards() {
   const { subjects, flashcards, addFlashcard, deleteFlashcard } = useAppStore()
@@ -123,11 +124,17 @@ export default function Flashcards() {
                       <SelectValue placeholder="Matéria de destino" />
                     </SelectTrigger>
                     <SelectContent>
-                      {subjects.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
+                      {subjects.map((s) => {
+                        const { icon: Icon, color } = getSubjectConfig(s.name)
+                        return (
+                          <SelectItem key={s.id} value={s.id}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4" style={{ color }} />
+                              <span>{s.name}</span>
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -170,11 +177,17 @@ export default function Flashcards() {
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {subjects.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
+                      {subjects.map((s) => {
+                        const { icon: Icon, color } = getSubjectConfig(s.name)
+                        return (
+                          <SelectItem key={s.id} value={s.id}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-4 w-4" style={{ color }} />
+                              <span>{s.name}</span>
+                            </div>
+                          </SelectItem>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -218,6 +231,7 @@ export default function Flashcards() {
               const due = sCards.filter(
                 (c) => c.nextReviewAt.startsWith(todayStr) || new Date(c.nextReviewAt) < new Date(),
               ).length
+              const { icon: Icon, color } = getSubjectConfig(subject.name)
               return (
                 <Card
                   key={subject.id}
@@ -228,9 +242,9 @@ export default function Flashcards() {
                       <div className="flex items-center gap-3">
                         <div
                           className="p-2.5 rounded-lg"
-                          style={{ backgroundColor: `${subject.color}15`, color: subject.color }}
+                          style={{ backgroundColor: `${color}15`, color: color }}
                         >
-                          <Layers className="h-5 w-5" />
+                          <Icon className="h-5 w-5" />
                         </div>
                         <CardTitle className="text-xl">{subject.name}</CardTitle>
                       </div>
@@ -294,9 +308,24 @@ export default function Flashcards() {
                     return (
                       <TableRow key={card.id}>
                         <TableCell>
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted">
-                            {s?.name}
-                          </span>
+                          {s ? (
+                            (() => {
+                              const { icon: Icon, color } = getSubjectConfig(s.name)
+                              return (
+                                <span
+                                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium"
+                                  style={{ backgroundColor: `${color}15`, color: color }}
+                                >
+                                  <Icon className="h-3 w-3" />
+                                  {s.name}
+                                </span>
+                              )
+                            })()
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
+                              Desconhecido
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell
                           className="font-medium max-w-[200px] truncate"

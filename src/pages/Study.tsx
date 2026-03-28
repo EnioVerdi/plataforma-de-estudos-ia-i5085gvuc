@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { HelpCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { getSubjectConfig } from '@/lib/subjects'
 
 export default function Study() {
   const { subjectId } = useParams()
@@ -35,7 +36,7 @@ export default function Study() {
     setIsFlipped(false)
     setTimeout(() => {
       setCurrentIndex((prev) => prev + 1)
-    }, 150) // slight delay for smooth transition
+    }, 150)
   }
 
   const handleNeedHelp = (e: React.MouseEvent) => {
@@ -49,6 +50,8 @@ export default function Study() {
 
   if (!subject)
     return <div className="p-8 text-center text-muted-foreground">Matéria não encontrada.</div>
+
+  const { icon: SubjectIcon, color: subjectColor } = getSubjectConfig(subject.name)
 
   return (
     <div className="max-w-4xl mx-auto h-full flex flex-col py-4 md:py-8 animate-fade-in">
@@ -93,9 +96,10 @@ export default function Study() {
               {/* Front */}
               <div className="absolute inset-0 backface-hidden bg-card border-2 border-border/60 rounded-3xl flex flex-col items-center justify-center p-8 md:p-12 text-center transition-colors">
                 <span
-                  className="text-xs font-bold text-muted-foreground uppercase tracking-widest absolute top-8"
-                  style={{ color: subject.color }}
+                  className="text-xs font-bold uppercase tracking-widest absolute top-8 flex items-center gap-1.5"
+                  style={{ color: subjectColor }}
                 >
+                  <SubjectIcon className="h-4 w-4" />
                   {subject.name}
                 </span>
                 <h3 className="text-2xl md:text-4xl font-medium leading-tight text-foreground">
