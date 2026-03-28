@@ -677,12 +677,29 @@ export const Constants = {
 //    LANGUAGE plpgsql
 //    SECURITY DEFINER
 //   AS $function$
-//   BEGIN
-//     INSERT INTO public.profiles (id, email)
-//     VALUES (NEW.id, NEW.email);
-//     RETURN NEW;
-//   END;
-//   $function$
+//     BEGIN
+//       INSERT INTO public.profiles (id, email)
+//       VALUES (NEW.id, NEW.email);
+//
+//       INSERT INTO public.subjects (id, name, color, user_id)
+//       VALUES
+//         (gen_random_uuid(), 'Português', '#3b82f6', NEW.id),
+//         (gen_random_uuid(), 'Matemática', '#ef4444', NEW.id),
+//         (gen_random_uuid(), 'Física', '#f59e0b', NEW.id),
+//         (gen_random_uuid(), 'Química', '#10b981', NEW.id),
+//         (gen_random_uuid(), 'Biologia', '#84cc16', NEW.id),
+//         (gen_random_uuid(), 'História', '#eab308', NEW.id),
+//         (gen_random_uuid(), 'Geografia', '#0ea5e9', NEW.id),
+//         (gen_random_uuid(), 'Filosofia', '#8b5cf6', NEW.id),
+//         (gen_random_uuid(), 'Sociologia', '#ec4899', NEW.id),
+//         (gen_random_uuid(), 'Inglês', '#6366f1', NEW.id),
+//         (gen_random_uuid(), 'Literatura', '#d946ef', NEW.id),
+//         (gen_random_uuid(), 'Artes', '#f43f5e', NEW.id),
+//         (gen_random_uuid(), 'Educação Física', '#f97316', NEW.id);
+//
+//       RETURN NEW;
+//     END;
+//     $function$
 //
 
 // --- INDEXES ---

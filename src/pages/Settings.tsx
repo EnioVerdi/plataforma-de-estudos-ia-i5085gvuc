@@ -34,8 +34,8 @@ export default function Settings() {
     const load = async () => {
       if (!user) return
       const [profRes, setRes] = await Promise.all([
-        supabase.from('profiles').select('name').eq('id', user.id).single(),
-        supabase.from('reminder_settings').select('*').eq('user_id', user.id).single(),
+        supabase.from('profiles').select('name').eq('id', user.id).maybeSingle(),
+        supabase.from('reminder_settings').select('*').eq('user_id', user.id).maybeSingle(),
       ])
       if (profRes.data) setProfile({ name: profRes.data.name || '' })
       if (setRes.data) setSettings(setRes.data)
