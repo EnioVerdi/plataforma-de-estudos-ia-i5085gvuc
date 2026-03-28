@@ -22,6 +22,9 @@ const SUBJECTS = [
   'Filosofia',
   'Sociologia',
   'Inglês',
+  'Literatura',
+  'Redação',
+  'Espanhol',
 ]
 
 const GOALS = [
