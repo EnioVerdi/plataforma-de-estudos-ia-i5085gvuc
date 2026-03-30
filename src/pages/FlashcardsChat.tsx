@@ -1,46 +1,77 @@
-import { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Bot, Paperclip, Send, Search, MessageSquarePlus, PlusCircle } from 'lucide-react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Send, Trash2, BotMessageSquare, Lightbulb } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
+import useAppStore from '@/stores/useAppStore'
+import UserAssessment from '../components/UserAssessment'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 interface Message {
   id: string
   role: 'user' | 'ai'
   content: string
+  timestamp: number
 }
 
-const HISTORY_MOCK = [
-  { id: '1', title: 'Dúvidas sobre Mitose', date: 'Hoje' },
-  { id: '2', title: 'Fórmulas de Física - Termodinâmica', date: 'Ontem' },
-  { id: '3', title: 'Revisão Guerra Fria', date: '25/03/2026' },
-  { id: '4', title: 'Regras de Crase', date: '20/03/2026' },
-]
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const MAX_MESSAGES = 50
+const MESSAGE_RETENTION_DAYS = 14
 
-const QUICK_CHIPS = [
-  'Como melhorar a retenção?',
-  'Explicar este flashcard',
-  'Gerar exercícios',
-  'Simplificar conceito',
-]
-
-export default function FlashcardsChat() {
+export default function FlashcardsChat(): React.JSX.Element {
   const { user } = useAuth()
+  const { subjects, addFlashcard, userAssessment, getPromptTemplate } = useAppStore()
+  const [showAssessment, setShowAssessment] = useState(!userAssessment)
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: 'initial',
+      id: 'initial-ai',
       role: 'ai',
-      content:
-        'Olá! Sou seu assistente focado em flashcards. Posso ajudar a criar novos cartões, melhorar os existentes ou explicar conceitos complexos. Como posso ajudar hoje?',
+      content: 'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+      timestamp: Date.now(),
     },
   ])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [selectedSubject, setSelectedSubject] = useState('')
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([])
+  const [showTemplate, setShowTemplate] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const cleanOldMessages = () => {
+      const cutoffDate = Date.now() - MESSAGE_RETENTION_DAYS * 24 * 60 * 60 * 1000
+      setMessages((prev) => prev.filter((msg) => msg.timestamp > cutoffDate))
+    }
+    cleanOldMessages()
+  }, [])
+
+  useEffect(() => {
+    const start = Math.max(0, messages.length - MAX_MESSAGES)
+    setDisplayMessages(messages.slice(start))
+  }, [messages])
 
   useEffect(() => {
     const loadHistory = async () => {
@@ -50,10 +81,12 @@ export default function FlashcardsChat() {
         .select('*')
         .eq('user_id', user.id)
         .order('timestamp', { ascending: true })
+        .limit(100)
+
       if (data && data.length > 0) {
         const history = data.flatMap((s: any) => [
-          { id: s.id + '-user', role: 'user' as const, content: s.query },
-          { id: s.id + '-ai', role: 'ai' as const, content: s.response },
+          { id: s.id + '-user', role: 'user' as const, content: s.query, timestamp: new Date(s.timestamp).getTime() },
+          { id: s.id + '-ai', role: 'ai' as const, content: s.response, timestamp: new Date(s.timestamp).getTime() },
         ])
         setMessages((prev) => [...prev, ...history])
       }
@@ -65,189 +98,404 @@ export default function FlashcardsChat() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
-  }, [messages])
+  }, [displayMessages])
 
-  const simulateAiResponse = (userText: string) => {
-    const aiResponse = `Entendi. Para trabalhar com "${userText}", recomendo criar flashcards que isolem partes do conceito. Quer que eu gere alguns exemplos práticos baseados no seu estilo de aprendizado?`
+  const parseFlashcardsFromAI = (aiResponse: string) => {
+    const flashcards: Array<{ question: string; answer: string }> = []
+    const lines = aiResponse.split('\n').map(l => l.trim()).filter(l => l.length > 0)
 
-    setTimeout(() => {
-      setIsLoading(false)
-      const newAiId = Math.random().toString()
-      setMessages((prev) => [...prev, { id: newAiId, role: 'ai', content: '' }])
+    console.log('Linhas da resposta:', lines)
 
-      let i = 0
-      const interval = setInterval(() => {
-        setMessages((prev) => {
-          const updated = [...prev]
-          const lastIndex = updated.length - 1
-          if (updated[lastIndex].id === newAiId) {
-            updated[lastIndex].content = aiResponse.slice(0, i + 1)
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      // PADRÃO 1: "P: pergunta | R: resposta" ou "Pergunta: X | Resposta: Y"
+      if (line.includes('|')) {
+        const match = line.match(/^(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)\s*\|\s*(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)$/)
+        if (match) {
+          const q = match[1].trim()
+          const a = match[2].trim()
+          if (q && a) {
+            flashcards.push({ question: q, answer: a })
+            console.log('Flashcard extraído (padrão pipe):', { q, a })
+            continue
           }
-          return updated
+        }
+      }
+
+      // PADRÃO 2: "P:" ou "Pergunta:" seguido por "R:" ou "Resposta:" na próxima linha
+      if (line.match(/^(P:|Pergunta:|Q:|Frente:)/i)) {
+        const question = line.replace(/^(P:|Pergunta:|Q:|Frente:)\s*/i, '').trim()
+
+        if (question && i + 1 < lines.length) {
+          const nextLine = lines[i + 1]
+          if (nextLine.match(/^(R:|Resposta:|A:|Verso:)/i)) {
+            const answer = nextLine.replace(/^(R:|Resposta:|A:|Verso:)\s*/i, '').trim()
+
+            if (answer) {
+              flashcards.push({ question, answer })
+              console.log('Flashcard extraído (padrão P/R):', { question, answer })
+              i += 1
+              continue
+            }
+          }
+        }
+      }
+
+      // PADRÃO 3: Numerado "1. pergunta" com resposta na próxima linha
+      const numMatch = line.match(/^(\d+)\.\s*(.+?)$/)
+      if (numMatch && i + 1 < lines.length) {
+        const question = numMatch[2].trim()
+        const nextLine = lines[i + 1]
+
+        if (!nextLine.match(/^\d+\./) && !nextLine.match(/^(P:|R:|Pergunta:|Resposta:)/i)) {
+          const answer = nextLine.trim()
+
+          if (question && answer) {
+            flashcards.push({ question, answer })
+            console.log('Flashcard extraído (padrão numerado):', { question, answer })
+            i += 1
+            continue
+          }
+        }
+      }
+    }
+
+    console.log('Total de flashcards extraídos:', flashcards.length)
+    console.log('Flashcards parseados:', flashcards)
+    return flashcards
+  }
+
+  const handleAiResponse = async (userText: string) => {
+    setIsLoading(true)
+    try {
+      const template = getPromptTemplate(selectedSubject)
+      const templateInstructions = template
+        ? `\n\nSIGA ESTE PADRÃO para ${template.subjectName}:\n${template.template}`
+        : ''
+
+      const systemPrompt = `Você é um especialista em criar flashcards otimizados para aprendizado.
+
+REGRAS IMPORTANTES:
+1. RESPOSTAS DIRETAS E CONCISAS: Máximo 2-3 linhas por resposta
+2. FOCO EM CONCEITOS-CHAVE: Priorize informações que são frequentemente esquecidas e cobradas em provas
+3. ESTRUTURA: Pergunta clara → Resposta objetiva (sem textos longos)
+4. EVITE: Explicações longas, exemplos desnecessários, redundâncias
+5. PRIORIZE: Dados, fórmulas, datas, conceitos críticos, exceções importantes
+6. FORMATO OBRIGATÓRIO: P: [pergunta] | R: [resposta concisa] (um por linha)
+
+EXEMPLO BOM:
+P: Qual é a capital do Brasil? | R: Brasília (desde 1960)
+P: Quando foi a Independência? | R: 7 de setembro de 1822
+
+EXEMPLO RUIM:
+P: Me fale sobre a capital do Brasil
+R: A capital do Brasil é Brasília, que foi construída no final dos anos 50... [MUITO LONGO]
+
+${templateInstructions}
+
+${
+  userAssessment
+    ? `Nível do aluno: ${userAssessment.studentLevel}
+Tempo de estudo: ${userAssessment.studyTime}
+Objetivo: ${userAssessment.goal}`
+    : ''
+}`
+
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userText },
+          ],
+          temperature: 0.7,
+          max_tokens: 1500,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Erro ao conectar com Groq')
+
+      const data = await response.json()
+      const aiResponseContent = data.choices[0].message.content
+
+      const parsedFlashcards = parseFlashcardsFromAI(aiResponseContent)
+      let chatMessage = ''
+
+      if (parsedFlashcards.length > 0) {
+        const subjectToUse = selectedSubject || subjects[0]?.id
+        
+        if (subjectToUse) {
+          for (const card of parsedFlashcards) {
+            addFlashcard({
+              question: card.question,
+              answer: card.answer,
+              subjectId: subjectToUse,
+              difficulty: 3,
+            })
+          }
+
+          const subjectName = subjects.find(s => s.id === subjectToUse)?.name || 'matéria'
+          const quantidade = parsedFlashcards.length
+          
+          chatMessage = `✅ **${quantidade} flashcard${quantidade > 1 ? 's' : ''}** foi${quantidade > 1 ? 'ram' : ''} adicionado${quantidade > 1 ? 's' : ''} à matéria **${subjectName}**! \n\nVocê pode visualizar na aba de Flashcards agora mesmo. 🎯`
+          
+          console.log(`Flashcards criados: ${quantidade} na matéria ${subjectName}`)
+        } else {
+          chatMessage = '⚠️ Selecione uma matéria para adicionar flashcards.'
+        }
+      } else {
+        chatMessage = `Não consegui extrair flashcards do formato esperado.\n\n${aiResponseContent}\n\n💡 Tente com: P: [pergunta] | R: [resposta]`
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        { id: Math.random().toString(), role: 'ai', content: chatMessage, timestamp: Date.now() },
+      ])
+
+      if (user) {
+        await supabase.from('flashcard_chat_sessions').insert({
+          user_id: user.id,
+          query: userText,
+          response: aiResponseContent,
+          timestamp: new Date().toISOString(),
         })
-        i++
-        if (i >= aiResponse.length) clearInterval(interval)
-      }, 25)
-    }, 800)
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+      toast.error('Desculpe, ocorreu um erro ao gerar flashcards.')
+      setMessages((prev) => [
+        ...prev,
+        { id: Math.random().toString(), role: 'ai', content: '❌ Erro ao processar sua solicitação. Tente novamente.', timestamp: Date.now() },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleSend = (text: string = input) => {
     if (!text.trim() || isLoading) return
-    const newMsg: Message = { id: Math.random().toString(), role: 'user', content: text }
-    setMessages((prev) => [...prev, newMsg])
+    setMessages((prev) => [...prev, { id: Math.random().toString(), role: 'user', content: text, timestamp: Date.now() }])
     setInput('')
-    setIsLoading(true)
-    simulateAiResponse(text)
+    handleAiResponse(text)
+  }
+
+  const handleDeleteHistory = async () => {
+    if (!user) return
+    try {
+      await supabase.from('flashcard_chat_sessions').delete().eq('user_id', user.id)
+      setMessages([
+        {
+          id: 'initial-ai',
+          role: 'ai',
+          content: 'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+          timestamp: Date.now(),
+        },
+      ])
+      toast.success('Histórico de conversas limpo com sucesso!')
+    } catch (error) {
+      console.error('Erro ao limpar histórico:', error)
+      toast.error('Erro ao limpar histórico de conversas.')
+    }
+  }
+
+  const currentTemplate = selectedSubject ? getPromptTemplate(selectedSubject) : null
+
+  if (showAssessment && userAssessment === null) {
+    return <UserAssessment onComplete={() => setShowAssessment(false)} />
   }
 
   return (
-    <div className="flex h-full bg-card rounded-2xl border shadow-sm overflow-hidden animate-fade-in-up">
-      {/* Left Sidebar - History */}
-      <div className="w-[30%] min-w-[280px] border-r bg-muted/10 hidden md:flex flex-col">
-        <div className="p-4 border-b space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">
-              Histórico de Conversas
-            </h3>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary">
-              <MessageSquarePlus className="h-5 w-5" />
-            </Button>
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Buscar conversas..." className="pl-9 h-9 bg-background" />
-          </div>
-          <Button
-            variant="outline"
-            className="w-full justify-start h-9"
-            onClick={() => setMessages([messages[0]])}
+    <div className="flex h-full w-full bg-beige-50 text-darkBlue-700 overflow-hidden">
+      <div className="w-[30%] min-w-[280px] border-r border-beige-300 bg-white hidden md:flex flex-col">
+        <div className="p-4 border-b border-beige-300 space-y-4">
+          <h3 className="font-semibold text-sm text-darkBlue-700">Matéria</h3>
+          <select
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-beige-300 bg-beige-50 text-sm text-darkBlue-700 focus:ring-darkBlue-500 focus:border-darkBlue-500"
           >
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Nova Conversa
-          </Button>
-        </div>
-        <ScrollArea className="flex-1 p-2">
-          <div className="space-y-1">
-            {HISTORY_MOCK.map((item) => (
-              <button
-                key={item.id}
-                className="w-full text-left px-3 py-3 rounded-xl hover:bg-muted transition-colors group"
-              >
-                <div className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-                  {item.title}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">{item.date}</div>
-              </button>
+            <option value="">Selecione...</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
             ))}
-          </div>
-        </ScrollArea>
+          </select>
+
+          {selectedSubject && (
+            <Button
+              onClick={() => setShowTemplate(true)}
+              variant="outline"
+              className="w-full border-darkBlue-300 text-darkBlue-700 hover:bg-beige-100 gap-2"
+            >
+              <Lightbulb className="h-4 w-4" />
+              Ver dica de como pedir
+            </Button>
+          )}
+        </div>
+        <ScrollArea className="flex-1" />
       </div>
 
-      {/* Right Area - Chat */}
-      <div className="flex-1 flex flex-col relative bg-background/50">
-        {/* Header */}
-        <div className="h-16 border-b flex items-center px-6 bg-background shrink-0 shadow-sm z-10">
+      <div className="flex-1 flex flex-col">
+        <div className="p-4 border-b border-beige-300 bg-white flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <Bot className="h-5 w-5 text-primary" />
+            <div className="h-10 w-10 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0">
+              <BotMessageSquare className="h-5 w-5 text-darkBlue-500" />
             </div>
             <div>
-              <h2 className="font-semibold leading-none mb-1">Chat de Flashcards com IA</h2>
-              <p className="text-xs text-muted-foreground">
-                Tire dúvidas e otimize seus cartões com ajuda da IA
+              <h2 className="font-semibold text-darkBlue-700">Flashcards IA</h2>
+            </div>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-darkBlue-500 hover:bg-beige-100">
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-white text-darkBlue-700 border-beige-300">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Limpar Histórico de Conversas?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas mensagens com o Flashcards IA.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteHistory} className="bg-red-500 hover:bg-red-600 text-white">
+                  Limpar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
+        <ScrollArea className="flex-1 p-4 md:p-6 bg-beige-50" ref={scrollRef}>
+          <div className="space-y-4 max-w-3xl mx-auto pb-4">
+            {displayMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={cn(
+                  'flex w-full gap-3',
+                  msg.role === 'user' ? 'justify-end' : 'justify-start',
+                )}
+              >
+                {msg.role === 'ai' && (
+                  <div className="w-8 h-8 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
+                    <BotMessageSquare className="h-4 w-4 text-darkBlue-500" />
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    'max-w-[85%] md:max-w-[75%] rounded-xl px-4 py-3 text-sm md:text-base leading-relaxed shadow-sm',
+                    msg.role === 'user'
+                      ? 'bg-darkBlue-500 text-white rounded-br-sm'
+                      : 'bg-beige-100 text-darkBlue-700 rounded-bl-sm',
+                  )}
+                >
+                  {msg.content.split('\n').map((line, j) => (
+                    <p key={j} className={j > 0 ? 'mt-2' : ''}>
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="flex w-full gap-3 justify-start animate-pulse">
+                <div className="w-8 h-8 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
+                  <BotMessageSquare className="h-4 w-4 text-darkBlue-500" />
+                </div>
+                <div className="bg-beige-100 rounded-xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"></div>
+                  <div
+                    className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"
+                    style={{ animationDelay: '0.2s' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"
+                    style={{ animationDelay: '0.4s' }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+
+        <div className="p-4 border-t border-beige-300 bg-white shrink-0">
+          <div className="max-w-3xl mx-auto">
+            <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex gap-2 items-end">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Digite aqui..."
+                className="rounded-xl h-12 bg-beige-50 border-beige-300 focus-visible:ring-darkBlue-500 shadow-sm text-darkBlue-700"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="h-12 w-12 rounded-xl shrink-0 shadow-sm bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+                disabled={!input.trim() || isLoading}
+              >
+                <Send className="h-5 w-5" />
+              </Button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <Dialog open={showTemplate} onOpenChange={setShowTemplate}>
+        <DialogContent className="sm:max-w-[600px] bg-white border-beige-300 text-darkBlue-700">
+          <DialogHeader>
+            <DialogTitle className="text-darkBlue-700 flex items-center gap-2">
+              <Lightbulb className="h-5 w-5" />
+              Como pedir flashcards eficientes sobre {currentTemplate?.subjectName}
+            </DialogTitle>
+            <DialogDescription className="text-darkBlue-500">
+              Siga este formato para extrair o máximo da IA:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="bg-beige-50 p-4 rounded-lg border border-beige-300">
+              <p className="text-sm font-semibold text-darkBlue-700 mb-3">📝 Template sugerido:</p>
+              <p className="text-sm text-darkBlue-700 whitespace-pre-wrap font-mono bg-white p-3 rounded border border-beige-200">
+                {currentTemplate?.template}
+              </p>
+            </div>
+
+            <div className="bg-green-50 p-4 rounded-lg border border-green-300">
+              <p className="text-sm font-semibold text-green-700 mb-2">✅ Dica prática:</p>
+              <p className="text-sm text-green-700">
+                {currentTemplate?.example}
+              </p>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-300">
+              <p className="text-sm font-semibold text-blue-700 mb-2">💡 Por que funciona:</p>
+              <p className="text-sm text-blue-700">
+                Ao seguir este padrão, a IA entende exatamente qual é o contexto e o nível de profundidade que você precisa, gerando flashcards mais relevantes e focados.
               </p>
             </div>
           </div>
-        </div>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6" ref={scrollRef}>
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn('flex gap-4 max-w-[85%]', msg.role === 'user' ? 'ml-auto' : 'mr-auto')}
-            >
-              {msg.role === 'ai' && (
-                <Avatar className="h-8 w-8 mt-1 border border-primary/20">
-                  <AvatarFallback className="bg-primary/10 text-primary">IA</AvatarFallback>
-                </Avatar>
-              )}
-              <div
-                className={cn(
-                  'px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap shadow-sm',
-                  msg.role === 'user'
-                    ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                    : 'bg-muted rounded-tl-sm',
-                )}
-              >
-                {msg.content}
-              </div>
-              {msg.role === 'user' && (
-                <Avatar className="h-8 w-8 mt-1">
-                  <AvatarImage src="https://img.usecurling.com/ppl/thumbnail?gender=male&seed=1" />
-                  <AvatarFallback>AL</AvatarFallback>
-                </Avatar>
-              )}
-            </div>
-          ))}
-          {isLoading && (
-            <div className="flex gap-4 max-w-[85%] mr-auto items-center text-muted-foreground">
-              <Avatar className="h-8 w-8 border border-primary/20">
-                <AvatarFallback className="bg-primary/10 text-primary">IA</AvatarFallback>
-              </Avatar>
-              <div className="bg-muted px-4 py-3 rounded-2xl rounded-tl-sm flex gap-1 items-center">
-                <span className="w-2 h-2 rounded-full bg-primary/50 animate-bounce" />
-                <span
-                  className="w-2 h-2 rounded-full bg-primary/50 animate-bounce"
-                  style={{ animationDelay: '0.2s' }}
-                />
-                <span
-                  className="w-2 h-2 rounded-full bg-primary/50 animate-bounce"
-                  style={{ animationDelay: '0.4s' }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Input Area */}
-        <div className="p-4 bg-background border-t shrink-0">
-          <div className="flex flex-wrap gap-2 mb-4">
-            {QUICK_CHIPS.map((chip) => (
-              <button
-                key={chip}
-                onClick={() => handleSend(chip)}
-                className="text-xs bg-muted hover:bg-muted/80 px-3 py-1.5 rounded-full transition-colors border shadow-sm"
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-          <div className="relative flex items-center shadow-sm">
+          <DialogFooter>
             <Button
-              variant="ghost"
-              size="icon"
-              className="absolute left-2 text-muted-foreground hover:text-foreground hover:bg-transparent"
+              onClick={() => setShowTemplate(false)}
+              className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
             >
-              <Paperclip className="h-5 w-5" />
+              Entendido! Fechar
             </Button>
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Digite sua pergunta..."
-              className="pl-12 pr-14 h-14 rounded-full border-muted-foreground/20 bg-muted/30 focus-visible:ring-primary/50"
-            />
-            <Button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isLoading}
-              className="absolute right-2 h-10 w-10 rounded-full p-0"
-            >
-              <Send className="h-4 w-4 ml-1" />
-            </Button>
-          </div>
-        </div>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

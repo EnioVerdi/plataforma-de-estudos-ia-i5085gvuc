@@ -9,7 +9,6 @@
     "**/*.{png,jpg,jpeg,gif,svg,ico,webp}",
     "**/*.d.ts",
     ".skip.config.json",
-    ".env*",
     ".npmrc",
     ".oxfmtrc.json",
     ".oxlintrc.json",

@@ -1,244 +1,564 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react'
-import { supabase } from '@/lib/supabase/client'
-import { useAuth } from '@/hooks/use-auth'
+import { create } from 'zustand'
 
-export interface Subject {
-  id: string
-  name: string
-  color: string
-}
-
-export interface Flashcard {
+// Interface para um flashcard com informações de revisão
+export interface FlashcardWithReview {
   id: string
   question: string
   answer: string
   subjectId: string
-  repetitions: number
-  interval: number
-  easeFactor: number
+  difficulty: 1 | 2 | 3 | 4 | 5
   nextReviewAt: string
+  lastReviewAt?: string
+  reviewCount: number
+  createdAt: string
 }
 
-export interface ProgressMetric {
+// ✅ INTERFACE ATUALIZADA: Suporta respostas discursivas
+export interface UserAssessmentData {
+  studentLevel: string
+  studyTime: string
+  goal: string
+  difficulties?: string
+  learningPreference?: string
+  knowledgeLevel?: string
+}
+
+// Interface para uma matéria/disciplina
+export interface Subject {
+  id: string
+  name: string
+}
+
+// Interface para as métricas diárias de estudo
+export interface DailyMetric {
   date: string
   studyTime: number
   flashcardsReviewed: number
 }
 
-interface AppStore {
-  subjects: Subject[]
-  flashcards: Flashcard[]
-  metrics: ProgressMetric[]
-  reviewCard: (cardId: string, quality: number) => void
-  addFlashcard: (
-    card: Omit<Flashcard, 'id' | 'repetitions' | 'interval' | 'easeFactor' | 'nextReviewAt'>,
-  ) => void
-  deleteFlashcard: (cardId: string) => void
-  chatContext: string
-  setChatContext: (ctx: string) => void
+// ✅ NOVO: Interface para dados do gráfico de dificuldade
+export interface DifficultyStats {
+  difficulty: number
+  label: string
+  count: number
+  color: string
+  bg: string
 }
 
-const AppStoreContext = createContext<AppStore | null>(null)
+// ✅ NOVO: Interface para templates de prompts
+export interface PromptTemplate {
+  subjectId: string
+  subjectName: string
+  template: string
+  example: string
+}
 
-export function AppStoreProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [flashcards, setFlashcards] = useState<Flashcard[]>([])
-  const [metrics, setMetrics] = useState<ProgressMetric[]>([])
-  const [chatContext, setChatContext] = useState('')
+// ✅ NOVO: Interface para notificação de revisão
+export interface ReviewNotification {
+  date: string
+  totalCards: number
+  bySubject: Array<{
+    subjectId: string
+    subjectName: string
+    count: number
+  }>
+}
 
-  useEffect(() => {
-    if (!user) return
-    const loadData = async () => {
-      const [subRes, cardRes, metRes] = await Promise.all([
-        supabase.from('subjects').select('*').eq('user_id', user.id),
-        supabase.from('flashcards').select('*').eq('user_id', user.id),
-        supabase
-          .from('progress_metrics')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('date', { ascending: false })
-          .limit(7),
-      ])
+// Interface para o estado global da aplicação
+interface AppState {
+  subjects: Subject[]
+  flashcards: FlashcardWithReview[]
+  userAssessment: UserAssessmentData | null
+  chatContext: string
+  metrics: DailyMetric[]
 
-      if (subRes.data && subRes.data.length === 0) {
-        const defaults = [
-          { name: 'Matemática', color: 'hsl(var(--chart-1))', user_id: user.id },
-          { name: 'Biologia', color: 'hsl(var(--chart-2))', user_id: user.id },
-          { name: 'História', color: 'hsl(var(--chart-3))', user_id: user.id },
-          { name: 'Química', color: 'hsl(var(--chart-4))', user_id: user.id },
-        ]
-        const { data: newSubs } = await supabase.from('subjects').insert(defaults).select()
-        if (newSubs)
-          setSubjects(newSubs.map((s: any) => ({ id: s.id, name: s.name, color: s.color })))
-      } else if (subRes.data) {
-        setSubjects(subRes.data.map((s: any) => ({ id: s.id, name: s.name, color: s.color })))
-      }
+  // ✅ ADICIONADO: Propriedades para o sistema de ofensiva (streak)
+  studyStreak: {
+    current: number
+    max: number
+  }
+  lastStudyDate: string | null
 
-      if (cardRes.data) {
-        setFlashcards(
-          cardRes.data.map((c: any) => ({
-            id: c.id,
-            question: c.question,
-            answer: c.answer,
-            subjectId: c.subject_id,
-            repetitions: c.repetitions,
-            interval: c.interval,
-            easeFactor: c.ease_factor,
-            nextReviewAt: c.next_review_at,
-          })),
-        )
-      }
+  // Funções para gerenciar matérias
+  addSubject: (subject: Subject) => void
 
-      if (metRes.data) {
-        setMetrics(
-          metRes.data.map((m: any) => ({
-            date: m.date,
-            studyTime: m.study_time,
-            flashcardsReviewed: m.flashcards_reviewed,
-          })),
-        )
-      }
-    }
-    loadData()
-  }, [user])
+  // Funções para gerenciar flashcards
+  addFlashcard: (
+    card: Omit<
+      FlashcardWithReview,
+      'id' | 'nextReviewAt' | 'lastReviewAt' | 'reviewCount' | 'createdAt'
+    > & { difficulty?: 1 | 2 | 3 | 4 | 5 }
+  ) => void
+  deleteFlashcard: (id: string) => void
+  updateFlashcardDifficulty: (cardId: string, difficulty: 1 | 2 | 3 | 4 | 5) => void
+  getFlashcardsForToday: () => FlashcardWithReview[]
 
-  const reviewCard = useCallback(
-    async (cardId: string, quality: number) => {
-      if (!user) return
-      const card = flashcards.find((c) => c.id === cardId)
-      if (!card) return
+  // Funções para gerenciar avaliação do usuário
+  setUserAssessment: (assessment: UserAssessmentData) => void
+  setChatContext: (context: string) => void
 
-      let { repetitions, interval, easeFactor } = card
-      if (quality >= 3) {
-        if (repetitions === 0) interval = 1
-        else if (repetitions === 1) interval = 6
-        else interval = Math.round(interval * easeFactor)
-        repetitions += 1
-      } else {
-        repetitions = 0
-        interval = 1
-      }
+  // Funções para gerenciar métricas diárias
+  addOrUpdateMetric: (date: string, studyTime: number, flashcardsReviewed: number) => void
+  updateDayMetrics: (type: 'studyTime' | 'flashcardsReviewed', value: number) => void
 
-      easeFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-      if (easeFactor < 1.3) easeFactor = 1.3
+  // ✅ NOVO: Funções para estatísticas de dificuldade (para o gráfico)
+  getDifficultyStats: () => DifficultyStats[]
 
-      const nextReview = new Date()
-      nextReview.setDate(nextReview.getDate() + interval)
-      const nextReviewStr = nextReview.toISOString()
+  // ✅ NOVO: Função para obter template de prompts
+  getPromptTemplate: (subjectId: string) => PromptTemplate | undefined
 
-      setFlashcards((prev) =>
-        prev.map((c) =>
-          c.id === cardId
-            ? { ...c, repetitions, interval, easeFactor, nextReviewAt: nextReviewStr }
-            : c,
+  // ✅ NOVO: Funções para email de revisão diária
+  getTodayReviewSummary: () => ReviewNotification
+  sendDailyReviewEmail: (userEmail: string, userName: string) => Promise<{ success: boolean; data?: any; error?: any }>
+
+  // ✅ ADICIONADO: Funções para gerenciar a ofensiva (streak)
+  updateStudyStreak: () => void
+  resetStreak: () => void
+  incrementStreak: () => void
+}
+
+// ✅ NOVO: Templates de prompts por matéria
+const PROMPT_TEMPLATES: PromptTemplate[] = [
+  {
+    subjectId: '1',
+    subjectName: 'Português',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Definições de conceitos principais
+- Exceções gramaticais importantes
+- Exemplos práticos de uso
+- Dicas para não confundir termos similares`,
+    example: 'Dica: Cole um texto ou descreva o conteúdo do livro/aula',
+  },
+  {
+    subjectId: '2',
+    subjectName: 'Matemática',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Fórmulas principais com quando usar
+- Passo a passo de resoluções
+- Casos especiais e exceções
+- Erros comuns a evitar`,
+    example: 'Dica: Descreva o tipo de problema ou fórmula que precisa estudar',
+  },
+  {
+    subjectId: '3',
+    subjectName: 'Inglês',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Vocabulário com contexto de uso
+- Phrasal verbs e expressões idiomáticas
+- Diferenças entre termos similares
+- Pronunciação (quando aplicável)`,
+    example: 'Dica: Descreva o nível de proficiência e o contexto (conversação, negócios, etc)',
+  },
+  {
+    subjectId: '4',
+    subjectName: 'Biologia',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Estruturas e funções de componentes
+- Processos biológicos passo a passo
+- Diferenças entre conceitos similares
+- Ciclos e relações entre organismos`,
+    example: 'Dica: Descreva o capítulo ou o sistema que está estudando',
+  },
+  {
+    subjectId: '5',
+    subjectName: 'Química',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Reações químicas com balanceamento
+- Propriedades de elementos
+- Quando cada reação ocorre
+- Mnemônicos para memorizar sequências`,
+    example: 'Dica: Descreva a classe de reação ou elemento em questão',
+  },
+  {
+    subjectId: '6',
+    subjectName: 'Física',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Fórmulas com unidades corretas
+- Aplicações práticas no mundo real
+- Diferenças entre conceitos (força vs aceleração, etc)
+- Problemas comuns de compreensão`,
+    example: 'Dica: Descreva o tema (mecânica, óptica, termodinâmica, etc)',
+  },
+  {
+    subjectId: '7',
+    subjectName: 'História',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Datas importantes e contexto
+- Personagens-chave e suas ações
+- Causas e consequências de eventos
+- Conexões entre períodos históricos`,
+    example: 'Dica: Descreva o período ou evento que está estudando',
+  },
+  {
+    subjectId: '8',
+    subjectName: 'Geografia',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Localização e características geográficas
+- Clima, vegetação e recursos naturais
+- Dados demográficos e econômicos
+- Impactos ambientais e sociais`,
+    example: 'Dica: Descreva a região ou tema ambiental em questão',
+  },
+  {
+    subjectId: '9',
+    subjectName: 'Educação Física',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Técnicas e movimentos corretos
+- Benefícios e objetivos do exercício
+- Erros comuns a evitar
+- Variações e progressões de dificuldade`,
+    example: 'Dica: Descreva o esporte ou exercício que está estudando',
+  },
+  {
+    subjectId: '10',
+    subjectName: 'Artes',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Artistas e suas obras principais
+- Movimentos artísticos e características
+- Técnicas e materiais utilizados
+- Contexto histórico e influências`,
+    example: 'Dica: Descreva o movimento artístico ou artista em questão',
+  },
+  {
+    subjectId: '11',
+    subjectName: 'Sociologia',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Conceitos-chave e definições
+- Teóricos importantes e suas ideias
+- Aplicações práticas na sociedade
+- Críticas e perspectivas alternativas`,
+    example: 'Dica: Descreva o conceito social que está estudando',
+  },
+  {
+    subjectId: '12',
+    subjectName: 'Filosofia',
+    template: `Crie flashcards sobre [TEMA] focando em:
+- Perguntas filosóficas fundamentais
+- Pensadores e suas correntes de pensamento
+- Argumentos principais e contra-argumentos
+- Aplicações contemporâneas`,
+    example: 'Dica: Descreva a corrente filosófica ou pensador em questão',
+  },
+]
+
+// Função auxiliar para calcular a próxima data de revisão
+const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
+  const now = new Date()
+  let daysToAdd = 1
+
+  switch (difficulty) {
+    case 1:
+      daysToAdd = 30
+      break
+    case 2:
+      daysToAdd = 14
+      break
+    case 3:
+      daysToAdd = 3
+      break
+    case 4:
+      daysToAdd = 1
+      break
+    case 5:
+      daysToAdd = 0
+      break
+  }
+
+  now.setDate(now.getDate() + daysToAdd)
+  return now.toISOString().split('T')[0]
+}
+
+// Cria o store Zustand
+const useAppStore = create<AppState>((set, get) => {
+  // Carrega dados do localStorage
+  const storedStreak = typeof window !== 'undefined' 
+    ? JSON.parse(localStorage.getItem('studyStreak') || '{"current": 0, "max": 0}')
+    : { current: 0, max: 0 }
+  
+  const storedLastStudyDate = typeof window !== 'undefined'
+    ? localStorage.getItem('lastStudyDate')
+    : null
+
+  return {
+    // Estado inicial
+    subjects: [
+      { id: '1', name: 'Português' },
+      { id: '2', name: 'Matemática' },
+      { id: '3', name: 'Inglês' },
+      { id: '4', name: 'Biologia' },
+      { id: '5', name: 'Química' },
+      { id: '6', name: 'Física' },
+      { id: '7', name: 'História' },
+      { id: '8', name: 'Geografia' },
+      { id: '9', name: 'Educação Física' },
+      { id: '10', name: 'Artes' },
+      { id: '11', name: 'Sociologia' },
+      { id: '12', name: 'Filosofia' },
+    ],
+    flashcards: [],
+    userAssessment: null,
+    chatContext: '',
+    metrics: [],
+    studyStreak: storedStreak,
+    lastStudyDate: storedLastStudyDate,
+
+    // ✅ Adiciona uma nova matéria
+    addSubject: (subject) => {
+      set((state) => ({
+        subjects: [...state.subjects, subject],
+      }))
+    },
+
+    // ✅ Adiciona um novo flashcard
+    addFlashcard: (card) => {
+      set((state) => ({
+        flashcards: [
+          ...state.flashcards,
+          {
+            id: Date.now().toString(),
+            ...card,
+            difficulty: card.difficulty || 3,
+            nextReviewAt: new Date().toISOString().split('T')[0],
+            reviewCount: 0,
+            createdAt: new Date().toISOString(),
+          } as FlashcardWithReview,
+        ],
+      }))
+    },
+
+    // ✅ Exclui um flashcard
+    deleteFlashcard: (id) => {
+      set((state) => ({
+        flashcards: state.flashcards.filter((c) => c.id !== id),
+      }))
+    },
+
+    // ✅ Atualiza a dificuldade de um flashcard
+    updateFlashcardDifficulty: (cardId, difficulty) => {
+      set((state) => ({
+        flashcards: state.flashcards.map((card) =>
+          card.id === cardId
+            ? {
+                ...card,
+                difficulty,
+                nextReviewAt: calculateNextReviewDate(difficulty),
+                lastReviewAt: new Date().toISOString(),
+                reviewCount: card.reviewCount + 1,
+              }
+            : card
         ),
-      )
+      }))
+    },
 
-      await supabase
-        .from('flashcards')
-        .update({
-          repetitions,
-          interval,
-          ease_factor: easeFactor,
-          next_review_at: nextReviewStr,
-          last_reviewed_at: new Date().toISOString(),
-        })
-        .eq('id', cardId)
+    // ✅ Retorna flashcards para revisar hoje
+    getFlashcardsForToday: () => {
+      const today = new Date().toISOString().split('T')[0]
+      return get().flashcards.filter((card) => {
+        const reviewDate = card.nextReviewAt.split('T')[0]
+        return reviewDate <= today
+      })
+    },
 
-      await supabase.from('reviews').insert({
-        flashcard_id: cardId,
-        user_id: user.id,
-        rating: quality,
+    // ✅ NOVO: Retorna estatísticas de dificuldade para o gráfico
+    getDifficultyStats: () => {
+      const flashcards = get().flashcards
+
+      const stats: DifficultyStats[] = [
+        { difficulty: 5, label: 'Muito Difícil', count: 0, color: '#9333ea', bg: '#faf5ff' },
+        { difficulty: 4, label: 'Difícil', count: 0, color: '#ef4444', bg: '#fee2e2' },
+        { difficulty: 3, label: 'Médio', count: 0, color: '#f59e0b', bg: '#fef3c7' },
+        { difficulty: 2, label: 'Fácil', count: 0, color: '#3b82f6', bg: '#dbeafe' },
+        { difficulty: 1, label: 'Muito Fácil', count: 0, color: '#10b981', bg: '#d1fae5' },
+      ]
+
+      flashcards.forEach((card) => {
+        const stat = stats.find((s) => s.difficulty === card.difficulty)
+        if (stat) {
+          stat.count += 1
+        }
       })
 
-      const todayStr = new Date().toISOString().split('T')[0]
-      const todayMetric = metrics.find((m) => m.date === todayStr)
+      // Ordena do mais difícil para o mais fácil
+      return stats.sort((a, b) => b.difficulty - a.difficulty)
+    },
 
-      if (todayMetric) {
-        const updatedTime = todayMetric.studyTime + 0.5
-        const updatedCount = todayMetric.flashcardsReviewed + 1
-        await supabase
-          .from('progress_metrics')
-          .update({ study_time: updatedTime, flashcards_reviewed: updatedCount })
-          .eq('user_id', user.id)
-          .eq('date', todayStr)
-        setMetrics((prev) =>
-          prev.map((m) =>
-            m.date === todayStr
-              ? { ...m, studyTime: updatedTime, flashcardsReviewed: updatedCount }
-              : m,
-          ),
-        )
-      } else {
-        await supabase
-          .from('progress_metrics')
-          .insert({ user_id: user.id, date: todayStr, study_time: 1, flashcards_reviewed: 1 })
-        setMetrics((prev) => [...prev, { date: todayStr, studyTime: 1, flashcardsReviewed: 1 }])
+    // ✅ NOVO: Obtém template de prompt por matéria
+    getPromptTemplate: (subjectId) => {
+      return PROMPT_TEMPLATES.find((t) => t.subjectId === subjectId)
+    },
+
+    // ✅ NOVO: Retorna resumo de revisão para hoje
+    getTodayReviewSummary: () => {
+      const today = new Date().toISOString().split('T')[0]
+      const dueCards = get().flashcards.filter((card) => {
+        const reviewDate = card.nextReviewAt.split('T')[0]
+        return reviewDate <= today
+      })
+
+      const bySubject = get().subjects
+        .map((subject) => ({
+          subjectId: subject.id,
+          subjectName: subject.name,
+          count: dueCards.filter((c) => c.subjectId === subject.id).length,
+        }))
+        .filter((s) => s.count > 0)
+        .sort((a, b) => b.count - a.count)
+
+      return {
+        date: today,
+        totalCards: dueCards.length,
+        bySubject,
       }
     },
-    [flashcards, metrics, user],
-  )
 
-  const addFlashcard = useCallback(
-    async (
-      card: Omit<Flashcard, 'id' | 'repetitions' | 'interval' | 'easeFactor' | 'nextReviewAt'>,
-    ) => {
-      if (!user) return
-      const newCard = {
-        question: card.question,
-        answer: card.answer,
-        subject_id: card.subjectId,
-        user_id: user.id,
-        ease_factor: 2.5,
-        interval: 0,
-        repetitions: 0,
-        next_review_at: new Date().toISOString(),
-      }
-      const { data } = await supabase.from('flashcards').insert(newCard).select().single()
-      if (data) {
-        setFlashcards((prev) => [
-          ...prev,
-          {
-            id: data.id,
-            question: data.question,
-            answer: data.answer,
-            subjectId: data.subject_id,
-            repetitions: data.repetitions,
-            interval: data.interval,
-            easeFactor: data.ease_factor,
-            nextReviewAt: data.next_review_at,
-          },
-        ])
+    // ✅ NOVO: Envia email de revisão diária
+    sendDailyReviewEmail: async (userEmail: string, userName: string) => {
+      try {
+        const summary = get().getTodayReviewSummary()
+
+        if (summary.totalCards === 0) {
+          return { 
+            success: true, 
+            data: { message: 'Nenhuma revisão pendente para hoje' } 
+          }
+        }
+
+        // TODO: Implement email sending functionality
+        // const response = await sendEmailFunction({ ... })
+        
+        return { 
+          success: true, 
+          data: { 
+            message: 'Notificação de revisão preparada',
+            summary 
+          } 
+        }
+      } catch (error) {
+        console.error('Erro ao enviar email:', error)
+        return { success: false, error }
       }
     },
-    [user],
-  )
 
-  const deleteFlashcard = useCallback(async (cardId: string) => {
-    setFlashcards((prev) => prev.filter((c) => c.id !== cardId))
-    await supabase.from('flashcards').delete().eq('id', cardId)
-  }, [])
+    // ✅ Define avaliação do usuário
+    setUserAssessment: (assessment) => {
+      set({ userAssessment: assessment })
+    },
 
-  const value = useMemo(
-    () => ({
-      subjects,
-      flashcards,
-      metrics,
-      reviewCard,
-      addFlashcard,
-      deleteFlashcard,
-      chatContext,
-      setChatContext,
-    }),
-    [subjects, flashcards, metrics, reviewCard, addFlashcard, deleteFlashcard, chatContext],
-  )
+    // ✅ Define contexto do chat
+    setChatContext: (context) => {
+      set({ chatContext: context })
+    },
 
-  return React.createElement(AppStoreContext.Provider, { value }, children)
-}
+    // ✅ Adiciona ou atualiza métrica diária
+    addOrUpdateMetric: (date, studyTime, flashcardsReviewed) => {
+      set((state) => {
+        const existingIndex = state.metrics.findIndex((m) => m.date === date)
+        if (existingIndex > -1) {
+          const updated = [...state.metrics]
+          updated[existingIndex] = { date, studyTime, flashcardsReviewed }
+          return { metrics: updated }
+        }
+        return { metrics: [...state.metrics, { date, studyTime, flashcardsReviewed }] }
+      })
+    },
 
-export default function useAppStore() {
-  const context = useContext(AppStoreContext)
-  if (!context) throw new Error('useAppStore must be used within AppStoreProvider')
-  return context
-}
+    // ✅ Atualiza métrica do dia atual
+    updateDayMetrics: (type, value) => {
+      const today = new Date().toISOString().split('T')[0]
+      set((state) => {
+        const existingIndex = state.metrics.findIndex((m) => m.date === today)
+        if (existingIndex > -1) {
+          const updated = [...state.metrics]
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            [type]: updated[existingIndex][type] + value,
+          }
+          return { metrics: updated }
+        }
+        return {
+          metrics: [
+            ...state.metrics,
+            {
+              date: today,
+              studyTime: type === 'studyTime' ? value : 0,
+              flashcardsReviewed: type === 'flashcardsReviewed' ? value : 0,
+            },
+          ],
+        }
+      })
+    },
+
+    // ✅ NOVO: Atualiza a ofensiva diária
+    updateStudyStreak: () => {
+      set((state) => {
+        const today = new Date()
+        const todayStr = today.toISOString().split('T')[0]
+        const lastStudyDate = state.lastStudyDate
+
+        let newCurrentStreak = state.studyStreak.current
+        let newMaxStreak = state.studyStreak.max
+
+        if (lastStudyDate === todayStr) {
+          return state
+        }
+
+        const yesterday = new Date(today)
+        yesterday.setDate(today.getDate() - 1)
+        const yesterdayStr = yesterday.toISOString().split('T')[0]
+
+        if (lastStudyDate === yesterdayStr) {
+          newCurrentStreak += 1
+        } else {
+          newCurrentStreak = 1
+        }
+
+        newMaxStreak = Math.max(newCurrentStreak, newMaxStreak)
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('studyStreak', JSON.stringify({ current: newCurrentStreak, max: newMaxStreak }))
+          localStorage.setItem('lastStudyDate', todayStr)
+        }
+
+        return {
+          studyStreak: { current: newCurrentStreak, max: newMaxStreak },
+          lastStudyDate: todayStr,
+        }
+      })
+    },
+
+    // ✅ NOVO: Reinicia a ofensiva
+    resetStreak: () => {
+      set(() => {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('studyStreak')
+          localStorage.removeItem('lastStudyDate')
+        }
+        return {
+          studyStreak: { current: 0, max: 0 },
+          lastStudyDate: null,
+        }
+      })
+    },
+
+    // ✅ NOVO: Incrementa manualmente a ofensiva
+    incrementStreak: () => {
+      set((state) => {
+        const todayStr = new Date().toISOString().split('T')[0]
+        const newCurrent = state.studyStreak.current + 1
+        const newMax = Math.max(newCurrent, state.studyStreak.max)
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('studyStreak', JSON.stringify({ current: newCurrent, max: newMax }))
+          localStorage.setItem('lastStudyDate', todayStr)
+        }
+
+        return {
+          studyStreak: { current: newCurrent, max: newMax },
+          lastStudyDate: todayStr,
+        }
+      })
+    },
+  }
+})
+
+export default useAppStore

@@ -81,6 +81,31 @@ export default {
           4: 'hsl(var(--chart-4))',
           5: 'hsl(var(--chart-5))',
         },
+        // ✅ ADICIONADO: Cores customizadas (Azul Escuro + Branco + Bege)
+        darkBlue: {
+          50: '#f0f4f8',
+          100: '#d9e2f0',
+          200: '#b3c5e1',
+          300: '#8ca7d2',
+          400: '#668ac3',
+          500: '#404d8c', // Azul Escuro Principal
+          600: '#2d3a66',
+          700: '#1a2340',
+          800: '#0f1520',
+          900: '#080a10',
+        },
+        beige: {
+          50: '#faf8f5',
+          100: '#f5f3f0', // Bege muito claro
+          200: '#ebe7e1',
+          300: '#e8dfd5', // Bege principal
+          400: '#ddd2c5',
+          500: '#d4c5b5', // Bege escuro
+          600: '#c9b5a0',
+          700: '#b89a81',
+          800: '#a07d62',
+          900: '#886543',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
