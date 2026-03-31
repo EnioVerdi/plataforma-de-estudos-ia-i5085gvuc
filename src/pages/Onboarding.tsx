@@ -144,7 +144,10 @@ export default function Onboarding() {
                         checked={data.studyGoals.includes(opt)}
                         onCheckedChange={() => toggleArrayItem('studyGoals', opt)}
                       />
-                      <Label htmlFor={`goal-${opt}`} className="flex-1 font-medium cursor-pointer text-darkBlue-700">
+                      <Label
+                        htmlFor={`goal-${opt}`}
+                        className="flex-1 font-medium cursor-pointer text-darkBlue-700"
+                      >
                         {opt}
                       </Label>
                     </div>
@@ -157,7 +160,9 @@ export default function Onboarding() {
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
               <div className="space-y-4">
-                <Label className="text-lg font-semibold text-darkBlue-700">Qual é o seu estilo de aprendizado?</Label>
+                <Label className="text-lg font-semibold text-darkBlue-700">
+                  Qual é o seu estilo de aprendizado?
+                </Label>
                 <p className="text-sm text-darkBlue-500">
                   Como você absorve informações com mais facilidade?
                 </p>
@@ -269,7 +274,9 @@ export default function Onboarding() {
                 </div>
 
                 <div className="text-center">
-                  <span className="text-4xl font-bold text-darkBlue-700">{data.studyHoursPerDay}</span>
+                  <span className="text-4xl font-bold text-darkBlue-700">
+                    {data.studyHoursPerDay}
+                  </span>
                   <span className="text-lg text-darkBlue-500 ml-2">
                     {data.studyHoursPerDay === 1 ? 'hora por dia' : 'horas por dia'}
                   </span>

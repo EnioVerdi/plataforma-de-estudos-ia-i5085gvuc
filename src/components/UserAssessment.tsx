@@ -124,9 +124,7 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
         </button>
 
         <CardHeader>
-          <CardTitle className="text-darkBlue-700">
-            Entenda Seu Perfil de Estudo 📋
-          </CardTitle>
+          <CardTitle className="text-darkBlue-700">Entenda Seu Perfil de Estudo 📋</CardTitle>
           <p className="text-sm text-darkBlue-500 mt-2">
             Responda algumas perguntas para personalizarmos a IA de acordo com suas necessidades
           </p>
@@ -159,7 +157,8 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
               />
 
               <p className="text-xs text-darkBlue-400">
-                💡 Quanto mais detalhado você for, melhor poderei ajudá-lo com conselhos personalizados!
+                💡 Quanto mais detalhado você for, melhor poderei ajudá-lo com conselhos
+                personalizados!
               </p>
             </div>
           )}

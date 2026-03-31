@@ -87,7 +87,7 @@ interface AppState {
     card: Omit<
       FlashcardWithReview,
       'id' | 'nextReviewAt' | 'lastReviewAt' | 'reviewCount' | 'createdAt'
-    > & { difficulty?: 1 | 2 | 3 | 4 | 5 }
+    > & { difficulty?: 1 | 2 | 3 | 4 | 5 },
   ) => void
   deleteFlashcard: (id: string) => void
   updateFlashcardDifficulty: (cardId: string, difficulty: 1 | 2 | 3 | 4 | 5) => void
@@ -109,7 +109,10 @@ interface AppState {
 
   // ✅ NOVO: Funções para email de revisão diária
   getTodayReviewSummary: () => ReviewNotification
-  sendDailyReviewEmail: (userEmail: string, userName: string) => Promise<{ success: boolean; data?: any; error?: any }>
+  sendDailyReviewEmail: (
+    userEmail: string,
+    userName: string,
+  ) => Promise<{ success: boolean; data?: any; error?: any }>
 
   // ✅ ADICIONADO: Funções para gerenciar a ofensiva (streak)
   updateStudyStreak: () => void
@@ -271,13 +274,13 @@ const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
 // Cria o store Zustand
 const useAppStore = create<AppState>((set, get) => {
   // Carrega dados do localStorage
-  const storedStreak = typeof window !== 'undefined' 
-    ? JSON.parse(localStorage.getItem('studyStreak') || '{"current": 0, "max": 0}')
-    : { current: 0, max: 0 }
-  
-  const storedLastStudyDate = typeof window !== 'undefined'
-    ? localStorage.getItem('lastStudyDate')
-    : null
+  const storedStreak =
+    typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('studyStreak') || '{"current": 0, "max": 0}')
+      : { current: 0, max: 0 }
+
+  const storedLastStudyDate =
+    typeof window !== 'undefined' ? localStorage.getItem('lastStudyDate') : null
 
   return {
     // Estado inicial
@@ -345,7 +348,7 @@ const useAppStore = create<AppState>((set, get) => {
                 lastReviewAt: new Date().toISOString(),
                 reviewCount: card.reviewCount + 1,
               }
-            : card
+            : card,
         ),
       }))
     },
@@ -395,8 +398,8 @@ const useAppStore = create<AppState>((set, get) => {
         return reviewDate <= today
       })
 
-      const bySubject = get().subjects
-        .map((subject) => ({
+      const bySubject = get()
+        .subjects.map((subject) => ({
           subjectId: subject.id,
           subjectName: subject.name,
           count: dueCards.filter((c) => c.subjectId === subject.id).length,
@@ -417,21 +420,21 @@ const useAppStore = create<AppState>((set, get) => {
         const summary = get().getTodayReviewSummary()
 
         if (summary.totalCards === 0) {
-          return { 
-            success: true, 
-            data: { message: 'Nenhuma revisão pendente para hoje' } 
+          return {
+            success: true,
+            data: { message: 'Nenhuma revisão pendente para hoje' },
           }
         }
 
         // TODO: Implement email sending functionality
         // const response = await sendEmailFunction({ ... })
-        
-        return { 
-          success: true, 
-          data: { 
+
+        return {
+          success: true,
+          data: {
             message: 'Notificação de revisão preparada',
-            summary 
-          } 
+            summary,
+          },
         }
       } catch (error) {
         console.error('Erro ao enviar email:', error)
@@ -515,7 +518,10 @@ const useAppStore = create<AppState>((set, get) => {
         newMaxStreak = Math.max(newCurrentStreak, newMaxStreak)
 
         if (typeof window !== 'undefined') {
-          localStorage.setItem('studyStreak', JSON.stringify({ current: newCurrentStreak, max: newMaxStreak }))
+          localStorage.setItem(
+            'studyStreak',
+            JSON.stringify({ current: newCurrentStreak, max: newMaxStreak }),
+          )
           localStorage.setItem('lastStudyDate', todayStr)
         }
 

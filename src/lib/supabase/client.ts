@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-console.log("Minha URL do Supabase:", import.meta.env.VITE_SUPABASE_URL);
+console.log('Minha URL do Supabase:', import.meta.env.VITE_SUPABASE_URL)
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Variáveis de ambiente do Supabase não configuradas')
 }

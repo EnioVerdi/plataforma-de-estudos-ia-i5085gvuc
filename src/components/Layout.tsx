@@ -73,7 +73,7 @@ export default function Layout() {
                         'py-5 text-base font-medium rounded-xl',
                         location.pathname === item.path
                           ? 'bg-darkBlue-500 text-white hover:bg-darkBlue-600'
-                          : 'text-darkBlue-700 hover:bg-beige-100'
+                          : 'text-darkBlue-700 hover:bg-beige-100',
                       )}
                     >
                       <Link to={item.path}>
@@ -112,7 +112,10 @@ export default function Layout() {
                     </Avatar>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 mt-2 bg-white text-darkBlue-700 border-beige-300">
+                <DropdownMenuContent
+                  align="end"
+                  className="w-56 mt-2 bg-white text-darkBlue-700 border-beige-300"
+                >
                   <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-beige-200" />
                   <DropdownMenuItem className="hover:bg-beige-100">Perfil</DropdownMenuItem>

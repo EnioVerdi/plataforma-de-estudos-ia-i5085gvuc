@@ -51,10 +51,11 @@ const DIFFICULTY_COLORS = {
 }
 
 export default function Index() {
-  const { metrics, flashcards, subjects, studyStreak, updateStudyStreak, getDifficultyStats } = useAppStore()
+  const { metrics, flashcards, subjects, studyStreak, updateStudyStreak, getDifficultyStats } =
+    useAppStore()
 
   const todayStr = new Date().toISOString().split('T')[0]
-  
+
   const dueCards = flashcards.filter(
     (c) =>
       c.nextReviewAt.startsWith(todayStr) ||
@@ -79,28 +80,25 @@ export default function Index() {
         const retained = sCards.filter((c) => c.difficulty > 2).length
         return {
           subject: s.name,
-          retention: sCards.length
-            ? Math.round((retained / sCards.length) * 100)
-            : 0,
+          retention: sCards.length ? Math.round((retained / sCards.length) * 100) : 0,
         }
       }),
     [subjects, flashcards],
   )
 
-  const dueBySubject: Array<{ id: string; name: string; count: number; color: string }> =
-    useMemo(
-      () =>
-        subjects
-          .map((s) => ({
-            id: s.id,
-            name: s.name,
-            count: dueCards.filter((c) => c.subjectId === s.id).length,
-            color: SUBJECT_COLORS[s.id] || '#6c757d',
-          }))
-          .filter((s) => s.count > 0)
-          .sort((a, b) => b.count - a.count),
-      [subjects, dueCards],
-    )
+  const dueBySubject: Array<{ id: string; name: string; count: number; color: string }> = useMemo(
+    () =>
+      subjects
+        .map((s) => ({
+          id: s.id,
+          name: s.name,
+          count: dueCards.filter((c) => c.subjectId === s.id).length,
+          color: SUBJECT_COLORS[s.id] || '#6c757d',
+        }))
+        .filter((s) => s.count > 0)
+        .sort((a, b) => b.count - a.count),
+    [subjects, dueCards],
+  )
 
   const chartData = useMemo(() => {
     const last7days = []
@@ -150,7 +148,11 @@ export default function Index() {
               </p>
             </div>
           </div>
-          <Button asChild size="lg" className="w-full sm:w-auto shadow-md bg-darkBlue-500 hover:bg-darkBlue-600 text-white">
+          <Button
+            asChild
+            size="lg"
+            className="w-full sm:w-auto shadow-md bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+          >
             <Link to={`/study/${dueBySubject[0]?.id}`}>Revisar {dueBySubject[0]?.name}</Link>
           </Button>
         </div>
@@ -216,12 +218,11 @@ export default function Index() {
               className="w-full h-full"
             >
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={difficultyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid
-                    strokeDasharray="3 3"
-                    vertical={false}
-                    stroke="#e8dfd5"
-                  />
+                <BarChart
+                  data={difficultyChartData}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8dfd5" />
                   <XAxis
                     dataKey="label"
                     tickLine={false}
@@ -239,12 +240,7 @@ export default function Index() {
                     content={<CustomTooltip />}
                     cursor={{ fill: 'rgba(64, 77, 140, 0.1)' }}
                   />
-                  <Bar
-                    dataKey="count"
-                    fill="#404d8c"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={60}
-                  />
+                  <Bar dataKey="count" fill="#404d8c" radius={[4, 4, 0, 0]} maxBarSize={60} />
                 </BarChart>
               </ResponsiveContainer>
             </ChartContainer>
@@ -268,10 +264,7 @@ export default function Index() {
                     margin={{ top: 10, right: 30, bottom: 10, left: 30 }}
                   >
                     <PolarGrid stroke="#e8dfd5" />
-                    <PolarAngleAxis
-                      dataKey="subject"
-                      tick={{ fill: '#404d8c', fontSize: 12 }}
-                    />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#404d8c', fontSize: 12 }} />
                     <Radar
                       name="Retenção"
                       dataKey="retention"

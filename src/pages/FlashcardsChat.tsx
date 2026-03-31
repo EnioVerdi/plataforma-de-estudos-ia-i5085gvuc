@@ -49,7 +49,8 @@ export default function FlashcardsChat(): React.JSX.Element {
     {
       id: 'initial-ai',
       role: 'ai',
-      content: 'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+      content:
+        'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
       timestamp: Date.now(),
     },
   ])
@@ -85,8 +86,18 @@ export default function FlashcardsChat(): React.JSX.Element {
 
       if (data && data.length > 0) {
         const history = data.flatMap((s: any) => [
-          { id: s.id + '-user', role: 'user' as const, content: s.query, timestamp: new Date(s.timestamp).getTime() },
-          { id: s.id + '-ai', role: 'ai' as const, content: s.response, timestamp: new Date(s.timestamp).getTime() },
+          {
+            id: s.id + '-user',
+            role: 'user' as const,
+            content: s.query,
+            timestamp: new Date(s.timestamp).getTime(),
+          },
+          {
+            id: s.id + '-ai',
+            role: 'ai' as const,
+            content: s.response,
+            timestamp: new Date(s.timestamp).getTime(),
+          },
         ])
         setMessages((prev) => [...prev, ...history])
       }
@@ -102,7 +113,10 @@ export default function FlashcardsChat(): React.JSX.Element {
 
   const parseFlashcardsFromAI = (aiResponse: string) => {
     const flashcards: Array<{ question: string; answer: string }> = []
-    const lines = aiResponse.split('\n').map(l => l.trim()).filter(l => l.length > 0)
+    const lines = aiResponse
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
 
     console.log('Linhas da resposta:', lines)
 
@@ -111,7 +125,9 @@ export default function FlashcardsChat(): React.JSX.Element {
 
       // PADRÃO 1: "P: pergunta | R: resposta" ou "Pergunta: X | Resposta: Y"
       if (line.includes('|')) {
-        const match = line.match(/^(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)\s*\|\s*(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)$/)
+        const match = line.match(
+          /^(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)\s*\|\s*(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)$/,
+        )
         if (match) {
           const q = match[1].trim()
           const a = match[2].trim()
@@ -177,20 +193,14 @@ export default function FlashcardsChat(): React.JSX.Element {
       const systemPrompt = `Você é um especialista em criar flashcards otimizados para aprendizado.
 
 REGRAS IMPORTANTES:
-1. RESPOSTAS DIRETAS E CONCISAS: Máximo 2-3 linhas por resposta
-2. FOCO EM CONCEITOS-CHAVE: Priorize informações que são frequentemente esquecidas e cobradas em provas
-3. ESTRUTURA: Pergunta clara → Resposta objetiva (sem textos longos)
-4. EVITE: Explicações longas, exemplos desnecessários, redundâncias
-5. PRIORIZE: Dados, fórmulas, datas, conceitos críticos, exceções importantes
-6. FORMATO OBRIGATÓRIO: P: [pergunta] | R: [resposta concisa] (um por linha)
-
-EXEMPLO BOM:
-P: Qual é a capital do Brasil? | R: Brasília (desde 1960)
-P: Quando foi a Independência? | R: 7 de setembro de 1822
-
-EXEMPLO RUIM:
-P: Me fale sobre a capital do Brasil
-R: A capital do Brasil é Brasília, que foi construída no final dos anos 50... [MUITO LONGO]
+1. RESponda EXATAMENTE e SOMENTE o que o usuário pediu, sem introduções, explicações extras ou conteúdo desnecessário. Máximo 2-3 linhas por flashcard.
+2. FOCO EM CONCEITOS-CHAVE: Priorize informações que são frequentemente esquecidas e cobradas em provas.
+3. ESTRUTURA OBRIGATÓRIA: P: [pergunta curta] | R: [resposta concisa, 1-2 frases] (um por linha).
+4. EVITE: Textos longos, redundâncias.
+5. PRIORIZE: Dados, fórmulas, datas, exceções importantes.
+6. No FINAL da resposta, sugira 1-2 opções relevantes:
+- "Quer mais flashcards sobre isso?"
+- "Quer saber como revisar esse assunto para vestibulares (Enem/UFPR)?"
 
 ${templateInstructions}
 
@@ -205,7 +215,7 @@ Objetivo: ${userAssessment.goal}`
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          Authorization: `Bearer ${GROQ_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -229,7 +239,7 @@ Objetivo: ${userAssessment.goal}`
 
       if (parsedFlashcards.length > 0) {
         const subjectToUse = selectedSubject || subjects[0]?.id
-        
+
         if (subjectToUse) {
           for (const card of parsedFlashcards) {
             addFlashcard({
@@ -240,11 +250,11 @@ Objetivo: ${userAssessment.goal}`
             })
           }
 
-          const subjectName = subjects.find(s => s.id === subjectToUse)?.name || 'matéria'
+          const subjectName = subjects.find((s) => s.id === subjectToUse)?.name || 'matéria'
           const quantidade = parsedFlashcards.length
-          
+
           chatMessage = `✅ **${quantidade} flashcard${quantidade > 1 ? 's' : ''}** foi${quantidade > 1 ? 'ram' : ''} adicionado${quantidade > 1 ? 's' : ''} à matéria **${subjectName}**! \n\nVocê pode visualizar na aba de Flashcards agora mesmo. 🎯`
-          
+
           console.log(`Flashcards criados: ${quantidade} na matéria ${subjectName}`)
         } else {
           chatMessage = '⚠️ Selecione uma matéria para adicionar flashcards.'
@@ -271,7 +281,12 @@ Objetivo: ${userAssessment.goal}`
       toast.error('Desculpe, ocorreu um erro ao gerar flashcards.')
       setMessages((prev) => [
         ...prev,
-        { id: Math.random().toString(), role: 'ai', content: '❌ Erro ao processar sua solicitação. Tente novamente.', timestamp: Date.now() },
+        {
+          id: Math.random().toString(),
+          role: 'ai',
+          content: '❌ Erro ao processar sua solicitação. Tente novamente.',
+          timestamp: Date.now(),
+        },
       ])
     } finally {
       setIsLoading(false)
@@ -280,7 +295,10 @@ Objetivo: ${userAssessment.goal}`
 
   const handleSend = (text: string = input) => {
     if (!text.trim() || isLoading) return
-    setMessages((prev) => [...prev, { id: Math.random().toString(), role: 'user', content: text, timestamp: Date.now() }])
+    setMessages((prev) => [
+      ...prev,
+      { id: Math.random().toString(), role: 'user', content: text, timestamp: Date.now() },
+    ])
     setInput('')
     handleAiResponse(text)
   }
@@ -293,7 +311,8 @@ Objetivo: ${userAssessment.goal}`
         {
           id: 'initial-ai',
           role: 'ai',
-          content: 'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+          content:
+            'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
           timestamp: Date.now(),
         },
       ])
@@ -362,12 +381,18 @@ Objetivo: ${userAssessment.goal}`
               <AlertDialogHeader>
                 <AlertDialogTitle>Limpar Histórico de Conversas?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas mensagens com o Flashcards IA.
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas
+                  mensagens com o Flashcards IA.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteHistory} className="bg-red-500 hover:bg-red-600 text-white">
+                <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteHistory}
+                  className="bg-red-500 hover:bg-red-600 text-white"
+                >
                   Limpar
                 </AlertDialogAction>
               </AlertDialogFooter>
@@ -430,7 +455,13 @@ Objetivo: ${userAssessment.goal}`
 
         <div className="p-4 border-t border-beige-300 bg-white shrink-0">
           <div className="max-w-3xl mx-auto">
-            <form onSubmit={(e) => { e.preventDefault(); handleSend() }} className="flex gap-2 items-end">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleSend()
+              }}
+              className="flex gap-2 items-end"
+            >
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -473,15 +504,14 @@ Objetivo: ${userAssessment.goal}`
 
             <div className="bg-green-50 p-4 rounded-lg border border-green-300">
               <p className="text-sm font-semibold text-green-700 mb-2">✅ Dica prática:</p>
-              <p className="text-sm text-green-700">
-                {currentTemplate?.example}
-              </p>
+              <p className="text-sm text-green-700">{currentTemplate?.example}</p>
             </div>
 
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-300">
               <p className="text-sm font-semibold text-blue-700 mb-2">💡 Por que funciona:</p>
               <p className="text-sm text-blue-700">
-                Ao seguir este padrão, a IA entende exatamente qual é o contexto e o nível de profundidade que você precisa, gerando flashcards mais relevantes e focados.
+                Ao seguir este padrão, a IA entende exatamente qual é o contexto e o nível de
+                profundidade que você precisa, gerando flashcards mais relevantes e focados.
               </p>
             </div>
           </div>

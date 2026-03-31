@@ -37,7 +37,8 @@ export default function Consultoria() {
     {
       id: 'initial-ai',
       role: 'ai',
-      content: 'Olá! Sou seu consultor de estudos inteligente. Como posso te ajudar a entender melhor os conteúdos hoje?',
+      content:
+        'Olá! Sou seu consultor de estudos inteligente. Como posso te ajudar a entender melhor os conteúdos hoje?',
       timestamp: Date.now(),
     },
   ])
@@ -55,8 +56,18 @@ export default function Consultoria() {
         .order('timestamp', { ascending: true })
       if (data && data.length > 0) {
         const history = data.flatMap((s: any) => [
-          { id: s.id + '-user', role: 'user' as const, content: s.query, timestamp: new Date(s.timestamp).getTime() },
-          { id: s.id + '-ai', role: 'ai' as const, content: s.response, timestamp: new Date(s.timestamp).getTime() },
+          {
+            id: s.id + '-user',
+            role: 'user' as const,
+            content: s.query,
+            timestamp: new Date(s.timestamp).getTime(),
+          },
+          {
+            id: s.id + '-ai',
+            role: 'ai' as const,
+            content: s.response,
+            timestamp: new Date(s.timestamp).getTime(),
+          },
         ])
         setMessages((prev) => [...prev, ...history])
       }
@@ -66,7 +77,10 @@ export default function Consultoria() {
 
   useEffect(() => {
     if (chatContext) {
-      setMessages((prev) => [...prev, { id: `ctx-${Date.now()}`, role: 'user', content: chatContext, timestamp: Date.now() }])
+      setMessages((prev) => [
+        ...prev,
+        { id: `ctx-${Date.now()}`, role: 'user', content: chatContext, timestamp: Date.now() },
+      ])
       setChatContext('')
       handleConsult(chatContext)
     }
@@ -82,15 +96,19 @@ export default function Consultoria() {
     setIsTyping(true)
     try {
       const systemPrompt = `Você é um consultor de estudos especializado em preparação para o vestibular da UFPR. 
-Ajude o aluno a entender conceitos difíceis, criando cronogramas e otimizando seu tempo de estudo.
-Seja claro, objetivo e prático nas respostas.
-Quando fizer explicações, use analogias e exemplos práticos.
-Para assuntos complexos, divida em partes menores.`
+REGRAS: Responda EXATAMENTE e SOMENTE o que o usuário pediu, de forma clara, objetiva e prática. Máximo 150 palavras. NÃO adicione introduções, explicações extras ou conteúdo desnecessário. Divida assuntos complexos em partes menores se necessário, usando analogias simples.
+
+No FINAL da resposta, sugira 1-2 opções relevantes:
+- "Quer um exemplo prático disso?"
+- "Quer saber como os vestibulares (Enem/UFPR) cobram esse assunto?"
+- "Quer uma explicação mais aprofundada?"
+
+Seja direto e útil.`
 
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
+          Authorization: `Bearer ${GROQ_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -112,17 +130,29 @@ Para assuntos complexos, divida em partes menores.`
       const data = await response.json()
       const aiResponse = data.choices[0].message.content
 
-      setMessages((prev) => [...prev, { id: `ai-${Date.now()}`, role: 'ai', content: aiResponse, timestamp: Date.now() }])
-      
+      setMessages((prev) => [
+        ...prev,
+        { id: `ai-${Date.now()}`, role: 'ai', content: aiResponse, timestamp: Date.now() },
+      ])
+
       if (user) {
         await supabase
           .from('consultation_sessions')
-          .insert({ user_id: user.id, query: userQuery, response: aiResponse, timestamp: new Date().toISOString() })
+          .insert({
+            user_id: user.id,
+            query: userQuery,
+            response: aiResponse,
+            timestamp: new Date().toISOString(),
+          })
       }
     } catch (error) {
       console.error('Erro ao consultar IA:', error)
-      const errorResponse = 'Desculpe, ocorreu um erro ao conectar com a IA. Verifique sua conexão e tente novamente.'
-      setMessages((prev) => [...prev, { id: `err-${Date.now()}`, role: 'ai', content: errorResponse, timestamp: Date.now() }])
+      const errorResponse =
+        'Desculpe, ocorreu um erro ao conectar com a IA. Verifique sua conexão e tente novamente.'
+      setMessages((prev) => [
+        ...prev,
+        { id: `err-${Date.now()}`, role: 'ai', content: errorResponse, timestamp: Date.now() },
+      ])
     } finally {
       setIsTyping(false)
     }
@@ -133,7 +163,10 @@ Para assuntos complexos, divida em partes menores.`
     const text = input.trim()
     if (!text) return
 
-    setMessages((prev) => [...prev, { id: `user-${Date.now()}`, role: 'user', content: text, timestamp: Date.now() }])
+    setMessages((prev) => [
+      ...prev,
+      { id: `user-${Date.now()}`, role: 'user', content: text, timestamp: Date.now() },
+    ])
     setInput('')
     handleConsult(text)
   }
@@ -146,7 +179,8 @@ Para assuntos complexos, divida em partes menores.`
         {
           id: 'initial-ai',
           role: 'ai',
-          content: 'Olá! Sou seu consultor de estudos inteligente. Como posso te ajudar a entender melhor os conteúdos hoje?',
+          content:
+            'Olá! Sou seu consultor de estudos inteligente. Como posso te ajudar a entender melhor os conteúdos hoje?',
           timestamp: Date.now(),
         },
       ])
@@ -191,12 +225,18 @@ Para assuntos complexos, divida em partes menores.`
             <AlertDialogHeader>
               <AlertDialogTitle>Limpar Histórico de Conversas?</AlertDialogTitle>
               <AlertDialogDescription>
-                Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas mensagens com o Consultor EstudoIA.
+                Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas
+                mensagens com o Consultor EstudoIA.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDeleteHistory} className="bg-red-500 hover:bg-red-600 text-white">
+              <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteHistory}
+                className="bg-red-500 hover:bg-red-600 text-white"
+              >
                 Limpar
               </AlertDialogAction>
             </AlertDialogFooter>

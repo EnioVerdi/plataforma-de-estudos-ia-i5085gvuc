@@ -1,14 +1,41 @@
 import { useState, useMemo } from 'react'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { BrainCircuit, Plus, Play, Edit, Trash2 } from 'lucide-react'
 import useAppStore, { FlashcardWithReview } from '@/stores/useAppStore'
@@ -128,7 +155,8 @@ export default function Flashcards() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-darkBlue-700">Meus Flashcards</h1>
           <p className="text-darkBlue-500 mt-1">
-            {flashcardsDueToday.length} cartões para revisar hoje • Total: {flashcards.length} cartões
+            {flashcardsDueToday.length} cartões para revisar hoje • Total: {flashcards.length}{' '}
+            cartões
           </p>
         </div>
         <div className="flex gap-2 w-full sm:w-auto">
@@ -236,16 +264,23 @@ export default function Flashcards() {
               }).length
 
               return (
-                <Card key={subject.id} className="bg-white border-beige-300 hover:shadow-md transition-shadow group">
+                <Card
+                  key={subject.id}
+                  className="bg-white border-beige-300 hover:shadow-md transition-shadow group"
+                >
                   <CardHeader className="pb-3">
                     <CardTitle className="text-xl text-darkBlue-700">{subject.name}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex justify-between items-end mt-4">
                       <div className="space-y-1">
-                        <p className="text-sm text-darkBlue-500">{sCards.length} cartões no total</p>
+                        <p className="text-sm text-darkBlue-500">
+                          {sCards.length} cartões no total
+                        </p>
                         {due > 0 ? (
-                          <p className="text-sm font-semibold text-orange-500">{due} pendentes para hoje</p>
+                          <p className="text-sm font-semibold text-orange-500">
+                            {due} pendentes para hoje
+                          </p>
                         ) : (
                           <p className="text-sm text-emerald-500 font-medium">Tudo revisado</p>
                         )}
@@ -290,7 +325,8 @@ export default function Flashcards() {
                 {filteredFlashcards.length > 0 ? (
                   filteredFlashcards.map((card) => {
                     const s = subjects.find((s) => s.id === card.subjectId)
-                    const diffInfo = DIFFICULTY_COLORS[card.difficulty as keyof typeof DIFFICULTY_COLORS]
+                    const diffInfo =
+                      DIFFICULTY_COLORS[card.difficulty as keyof typeof DIFFICULTY_COLORS]
                     return (
                       <TableRow key={card.id} className="border-beige-200">
                         <TableCell>
@@ -298,10 +334,16 @@ export default function Flashcards() {
                             {s?.name || 'Desconhecido'}
                           </span>
                         </TableCell>
-                        <TableCell className="font-medium max-w-[200px] truncate text-darkBlue-700" title={card.question}>
+                        <TableCell
+                          className="font-medium max-w-[200px] truncate text-darkBlue-700"
+                          title={card.question}
+                        >
                           {card.question}
                         </TableCell>
-                        <TableCell className="text-darkBlue-500 max-w-[250px] truncate" title={card.answer}>
+                        <TableCell
+                          className="text-darkBlue-500 max-w-[250px] truncate"
+                          title={card.answer}
+                        >
                           {card.answer}
                         </TableCell>
                         <TableCell>
@@ -341,7 +383,9 @@ export default function Flashcards() {
           <DialogHeader>
             <DialogTitle className="text-darkBlue-700">Revisar Flashcard</DialogTitle>
             <DialogDescription className="text-darkBlue-500">
-              {currentReviewCard ? `Flashcard ${reviewIndex + 1} de ${reviewSessionCards.length}` : ''}
+              {currentReviewCard
+                ? `Flashcard ${reviewIndex + 1} de ${reviewSessionCards.length}`
+                : ''}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -349,7 +393,9 @@ export default function Flashcards() {
               <>
                 <Card className="bg-beige-100 border-beige-300">
                   <CardHeader>
-                    <CardTitle className="text-darkBlue-700 text-lg">{currentReviewCard.question}</CardTitle>
+                    <CardTitle className="text-darkBlue-700 text-lg">
+                      {currentReviewCard.question}
+                    </CardTitle>
                   </CardHeader>
                   {showAnswer && (
                     <CardContent>
