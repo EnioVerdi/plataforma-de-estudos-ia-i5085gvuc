@@ -123,7 +123,6 @@ export default function FlashcardsChat(): React.JSX.Element {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
 
-      // PADRÃO 1: "P: pergunta | R: resposta" ou "Pergunta: X | Resposta: Y"
       if (line.includes('|')) {
         const match = line.match(
           /^(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)\s*\|\s*(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)$/,
@@ -139,7 +138,6 @@ export default function FlashcardsChat(): React.JSX.Element {
         }
       }
 
-      // PADRÃO 2: "P:" ou "Pergunta:" seguido por "R:" ou "Resposta:" na próxima linha
       if (line.match(/^(P:|Pergunta:|Q:|Frente:)/i)) {
         const question = line.replace(/^(P:|Pergunta:|Q:|Frente:)\s*/i, '').trim()
 
@@ -158,7 +156,6 @@ export default function FlashcardsChat(): React.JSX.Element {
         }
       }
 
-      // PADRÃO 3: Numerado "1. pergunta" com resposta na próxima linha
       const numMatch = line.match(/^(\d+)\.\s*(.+?)$/)
       if (numMatch && i + 1 < lines.length) {
         const question = numMatch[2].trim()
@@ -184,6 +181,19 @@ export default function FlashcardsChat(): React.JSX.Element {
 
   const handleAiResponse = async (userText: string) => {
     setIsLoading(true)
+    console.log('DEBUG - FlashcardsChat: Iniciando handleAiResponse')
+    console.log('DEBUG - FlashcardsChat: selectedSubject =', selectedSubject)
+
+    // ✅ VALIDAÇÃO: Verifica se a matéria foi selecionada
+    if (!selectedSubject || selectedSubject.trim() === '') {
+      console.log('DEBUG - FlashcardsChat: ERRO - Matéria não selecionada!')
+      toast.error('Selecione a matéria antes de criar flashcards.')
+      setIsLoading(false)
+      return // IMPEDE A CRIAÇÃO
+    }
+
+    console.log('DEBUG - FlashcardsChat: Matéria selecionada com sucesso:', selectedSubject)
+
     try {
       const template = getPromptTemplate(selectedSubject)
       const templateInstructions = template
@@ -455,14 +465,15 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Digite aqui..."
+                placeholder={selectedSubject ? "Descreva o conteúdo..." : "Selecione a matéria antes..."}
                 className="rounded-xl h-12 bg-beige-50 border-beige-300 focus-visible:ring-darkBlue-500 shadow-sm text-darkBlue-700"
+                disabled={!selectedSubject || isLoading}
               />
               <Button
                 type="submit"
                 size="icon"
                 className="h-12 w-12 rounded-xl shrink-0 shadow-sm bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || !selectedSubject}
               >
                 <Send className="h-5 w-5" />
               </Button>
