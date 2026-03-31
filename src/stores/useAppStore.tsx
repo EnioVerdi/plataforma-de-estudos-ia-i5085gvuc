@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { supabase } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 export interface FlashcardWithReview {
   id: string
@@ -10,6 +12,9 @@ export interface FlashcardWithReview {
   lastReviewAt?: string
   reviewCount: number
   createdAt: string
+  easeFactor: number
+  interval: number
+  repetitions: number
 }
 
 export interface UserAssessmentData {
@@ -73,12 +78,15 @@ interface AppState {
   addFlashcard: (
     card: Omit<
       FlashcardWithReview,
-      'id' | 'nextReviewAt' | 'lastReviewAt' | 'reviewCount' | 'createdAt'
+      'id' | 'nextReviewAt' | 'lastReviewAt' | 'reviewCount' | 'createdAt' | 'easeFactor' | 'interval' | 'repetitions'
     > & { difficulty?: 1 | 2 | 3 | 4 | 5 },
   ) => void
   deleteFlashcard: (id: string) => void
   updateFlashcardDifficulty: (cardId: string, difficulty: 1 | 2 | 3 | 4 | 5) => void
   getFlashcardsForToday: () => FlashcardWithReview[]
+  getFlashcardsCountBySubject: (subjectId: string) => number
+  canAddFlashcard: (subjectId: string) => boolean
+  loadFlashcardsFromSupabase: (userId: string) => Promise<void>
   setUserAssessment: (assessment: UserAssessmentData) => void
   setChatContext: (context: string) => void
   addOrUpdateMetric: (date: string, studyTime: number, flashcardsReviewed: number) => void
@@ -218,6 +226,9 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
   },
 ]
 
+const FLASHCARD_LIMIT_PER_SUBJECT = 20
+const SM2_INITIAL_EASE_FACTOR = 2.5
+
 const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
   const now = new Date()
   let daysToAdd = 1
@@ -292,6 +303,9 @@ const useAppStore = create<AppState>((set, get) => {
             nextReviewAt: new Date().toISOString().split('T')[0],
             reviewCount: 0,
             createdAt: new Date().toISOString(),
+            easeFactor: SM2_INITIAL_EASE_FACTOR,
+            interval: 0,
+            repetitions: 0,
           } as FlashcardWithReview,
         ],
       }))
@@ -325,6 +339,53 @@ const useAppStore = create<AppState>((set, get) => {
         const reviewDate = card.nextReviewAt.split('T')[0]
         return reviewDate <= today
       })
+    },
+
+    getFlashcardsCountBySubject: (subjectId: string) => {
+      return get().flashcards.filter((card) => card.subjectId === subjectId).length
+    },
+
+    canAddFlashcard: (subjectId: string) => {
+      const count = get().getFlashcardsCountBySubject(subjectId)
+      return count < FLASHCARD_LIMIT_PER_SUBJECT
+    },
+
+    loadFlashcardsFromSupabase: async (userId: string) => {
+      console.log('DEBUG - loadFlashcardsFromSupabase: Carregando para userId:', userId)
+      if (!userId) return
+
+      try {
+        const { data, error } = await supabase
+          .from('flashcards')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+
+        if (error) {
+          console.error('DEBUG - loadFlashcardsFromSupabase: Erro:', error)
+          return
+        }
+
+        const flashcards: FlashcardWithReview[] = (data || []).map((card: any) => ({
+          id: card.id.toString(),
+          question: card.question,
+          answer: card.answer,
+          subjectId: card.subject_id,
+          difficulty: card.difficulty || 3,
+          nextReviewAt: card.next_review_at,
+          lastReviewAt: card.last_review_at,
+          reviewCount: card.review_count || 0,
+          createdAt: card.created_at,
+          easeFactor: card.ease_factor || SM2_INITIAL_EASE_FACTOR,
+          interval: card.interval || 0,
+          repetitions: card.repetitions || 0,
+        }))
+
+        set({ flashcards })
+        console.log('DEBUG - loadFlashcardsFromSupabase: Carregados', flashcards.length, 'flashcards do Supabase.')
+      } catch (error) {
+        console.error('DEBUG - loadFlashcardsFromSupabase: Erro:', error)
+      }
     },
 
     getDifficultyStats: () => {

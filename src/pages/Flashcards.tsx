@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Card,
   CardContent,
@@ -39,6 +39,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { BrainCircuit, Plus, Play, Edit, Trash2 } from 'lucide-react'
 import useAppStore, { FlashcardWithReview } from '@/stores/useAppStore'
+import { useAuth } from '@/hooks/use-auth'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -51,7 +52,25 @@ const DIFFICULTY_COLORS = {
   5: { label: 'Muito Difícil', color: '#9333ea', bg: '#faf5ff' },
 }
 
+const FLASHCARD_LIMIT_PER_SUBJECT = 20
+
+const formatNextReviewDate = (nextReviewAt: string): string => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const reviewDate = new Date(nextReviewAt)
+  reviewDate.setHours(0, 0, 0, 0)
+
+  const diffTime = reviewDate.getTime() - today.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) return 'Hoje'
+  if (diffDays === 1) return 'Amanhã'
+  if (diffDays > 1) return `Em ${diffDays} dias`
+  return `Atrasado em ${Math.abs(diffDays)} dias`
+}
+
 export default function Flashcards() {
+  const { user } = useAuth()
   const {
     subjects,
     flashcards,
@@ -59,6 +78,9 @@ export default function Flashcards() {
     deleteFlashcard,
     updateFlashcardDifficulty,
     getFlashcardsForToday,
+    getFlashcardsCountBySubject,
+    canAddFlashcard,
+    loadFlashcardsFromSupabase,
   } = useAppStore()
 
   const [open, setOpen] = useState(false)
@@ -76,6 +98,14 @@ export default function Flashcards() {
     subjectId: '',
     difficulty: 3 as 1 | 2 | 3 | 4 | 5,
   })
+
+  // Carregar flashcards do Supabase quando o usuário logar
+  useEffect(() => {
+    if (user?.id) {
+      console.log('DEBUG - Flashcards.tsx: Carregando flashcards do Supabase para usuário:', user.id)
+      loadFlashcardsFromSupabase(user.id)
+    }
+  }, [user?.id, loadFlashcardsFromSupabase])
 
   const flashcardsDueToday = useMemo(() => getFlashcardsForToday(), [flashcards])
 
@@ -97,6 +127,10 @@ export default function Flashcards() {
   const handleAdd = () => {
     if (!newCard.question || !newCard.answer || !newCard.subjectId) {
       toast.error('Preencha todos os campos.')
+      return
+    }
+    if (!canAddFlashcard(newCard.subjectId)) {
+      toast.error(`Limite de ${FLASHCARD_LIMIT_PER_SUBJECT} flashcards atingido para esta matéria.`)
       return
     }
     addFlashcard({
@@ -174,8 +208,8 @@ export default function Flashcards() {
                     </SelectTrigger>
                     <SelectContent className="bg-white border-beige-300 text-darkBlue-700">
                       {subjects.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
+                        <SelectItem key={s.id} value={s.id} disabled={!canAddFlashcard(s.id)}>
+                          {s.name} ({getFlashcardsCountBySubject(s.id)}/{FLASHCARD_LIMIT_PER_SUBJECT})
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -222,6 +256,7 @@ export default function Flashcards() {
                 <Button
                   onClick={handleAdd}
                   className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+                  disabled={!newCard.subjectId || !canAddFlashcard(newCard.subjectId)}
                 >
                   Salvar Cartão
                 </Button>
@@ -262,6 +297,8 @@ export default function Flashcards() {
                 const reviewDate = c.nextReviewAt.split('T')[0]
                 return reviewDate <= todayStr
               }).length
+              const currentCount = getFlashcardsCountBySubject(subject.id)
+              const isLimitReached = currentCount >= FLASHCARD_LIMIT_PER_SUBJECT
 
               return (
                 <Card
@@ -270,6 +307,10 @@ export default function Flashcards() {
                 >
                   <CardHeader className="pb-3">
                     <CardTitle className="text-xl text-darkBlue-700">{subject.name}</CardTitle>
+                    <CardDescription className="text-sm text-darkBlue-500">
+                      {currentCount}/{FLASHCARD_LIMIT_PER_SUBJECT} cartões
+                      {isLimitReached && <span className="text-red-500 ml-2">(Limite Atingido)</span>}
+                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex justify-between items-end mt-4">
@@ -318,6 +359,8 @@ export default function Flashcards() {
                   <TableHead className="text-darkBlue-700">Pergunta</TableHead>
                   <TableHead className="text-darkBlue-700">Resposta</TableHead>
                   <TableHead className="w-[100px] text-darkBlue-700">Dificuldade</TableHead>
+                  <TableHead className="w-[80px] text-darkBlue-700">EF</TableHead>
+                  <TableHead className="w-[120px] text-darkBlue-700">Próx. Revisão</TableHead>
                   <TableHead className="text-right text-darkBlue-700">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -351,6 +394,12 @@ export default function Flashcards() {
                             {diffInfo.label}
                           </Badge>
                         </TableCell>
+                        <TableCell className="text-darkBlue-500">
+                          {card.easeFactor ? card.easeFactor.toFixed(2) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-darkBlue-500">
+                          {formatNextReviewDate(card.nextReviewAt)}
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button
                             variant="ghost"
@@ -366,7 +415,7 @@ export default function Flashcards() {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-darkBlue-500">
+                    <TableCell colSpan={7} className="h-24 text-center text-darkBlue-500">
                       Nenhum cartão encontrado.
                     </TableCell>
                   </TableRow>
@@ -417,37 +466,37 @@ export default function Flashcards() {
                       <Button
                         variant="outline"
                         onClick={() => handleDifficultySelect(5)}
-                        className="border-red-500 text-red-500 hover:bg-red-50 text-xs"
+                        className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 text-xs"
                       >
-                        5
+                        5 - Muito Fácil
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => handleDifficultySelect(4)}
-                        className="border-orange-500 text-orange-500 hover:bg-orange-50 text-xs"
+                        className="border-blue-500 text-blue-500 hover:bg-blue-50 text-xs"
                       >
-                        4
+                        4 - Fácil
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => handleDifficultySelect(3)}
                         className="border-yellow-500 text-yellow-500 hover:bg-yellow-50 text-xs"
                       >
-                        3
+                        3 - Médio
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => handleDifficultySelect(2)}
-                        className="border-green-500 text-green-500 hover:bg-green-50 text-xs"
+                        className="border-red-500 text-red-500 hover:bg-red-50 text-xs"
                       >
-                        2
+                        2 - Difícil
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => handleDifficultySelect(1)}
-                        className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 text-xs"
+                        className="border-purple-500 text-purple-500 hover:bg-purple-50 text-xs"
                       >
-                        1
+                        1 - Muito Difícil
                       </Button>
                     </div>
                   </div>
