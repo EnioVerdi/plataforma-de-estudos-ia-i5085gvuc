@@ -84,8 +84,6 @@ interface AppState {
   deleteFlashcard: (id: string) => void
   updateFlashcardDifficulty: (cardId: string, difficulty: 1 | 2 | 3 | 4 | 5) => void
   getFlashcardsForToday: () => FlashcardWithReview[]
-  getFlashcardsCountBySubject: (subjectId: string) => number
-  canAddFlashcard: (subjectId: string) => boolean
   loadFlashcardsFromSupabase: (userId: string) => Promise<void>
   setUserAssessment: (assessment: UserAssessmentData) => void
   setChatContext: (context: string) => void
@@ -226,8 +224,8 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
   },
 ]
 
-const FLASHCARD_LIMIT_PER_SUBJECT = 20
 const SM2_INITIAL_EASE_FACTOR = 2.5
+const DAILY_REVIEW_LIMIT = 20
 
 const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
   const now = new Date()
@@ -335,19 +333,18 @@ const useAppStore = create<AppState>((set, get) => {
 
     getFlashcardsForToday: () => {
       const today = new Date().toISOString().split('T')[0]
-      return get().flashcards.filter((card) => {
+      const allDueCards = get().flashcards.filter((card) => {
         const reviewDate = card.nextReviewAt.split('T')[0]
         return reviewDate <= today
       })
-    },
 
-    getFlashcardsCountBySubject: (subjectId: string) => {
-      return get().flashcards.filter((card) => card.subjectId === subjectId).length
-    },
+      allDueCards.sort((a, b) => {
+        const dateA = new Date(a.nextReviewAt).getTime()
+        const dateB = new Date(b.nextReviewAt).getTime()
+        return dateA - dateB
+      })
 
-    canAddFlashcard: (subjectId: string) => {
-      const count = get().getFlashcardsCountBySubject(subjectId)
-      return count < FLASHCARD_LIMIT_PER_SUBJECT
+      return allDueCards.slice(0, DAILY_REVIEW_LIMIT)
     },
 
     loadFlashcardsFromSupabase: async (userId: string) => {

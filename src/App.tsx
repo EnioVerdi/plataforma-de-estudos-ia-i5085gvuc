@@ -4,18 +4,19 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from './hooks/use-auth'
 import { useOnboarding } from './hooks/useOnboarding'
-import Layout from './components/Layout'
-import Index from './pages/Index'
-import Flashcards from './pages/Flashcards'
-import Study from './pages/Study'
-import Consultoria from './pages/Consultoria'
-import Settings from './pages/Settings'
-import Register from './pages/Register'
-import CheckEmail from './pages/auth/CheckEmail'
-import Onboarding from './pages/Onboarding'
-import FlashcardsChat from './pages/FlashcardsChat'
-import NotFound from './pages/NotFound'
-import UserAssessment from './components/UserAssessment'
+import { useInitializeApp } from '@/hooks/useInitializeApp'
+import Layout from '@/components/Layout'
+import Index from '@/pages/Index'
+import Flashcards from '@/pages/Flashcards'
+import Study from '@/pages/Study'
+import Consultoria from '@/pages/Consultoria'
+import Settings from '@/pages/Settings'
+import Register from '@/pages/Register'
+import CheckEmail from '@/pages/auth/CheckEmail'
+import Onboarding from '@/pages/Onboarding'
+import FlashcardsChat from '@/pages/FlashcardsChat'
+import NotFound from '@/pages/NotFound'
+import UserAssessment from '@/components/UserAssessment'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -26,6 +27,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 const AppContent = () => {
   const { showAssessment, setShowAssessment } = useOnboarding()
+  useInitializeApp()
 
   return (
     <>
