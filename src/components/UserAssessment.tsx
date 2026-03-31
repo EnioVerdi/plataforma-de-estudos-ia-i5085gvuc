@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { ArrowLeft, ArrowRight, CheckCircle2, X } from 'lucide-react'
 import useAppStore from '@/stores/useAppStore'
+import { supabase } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/use-auth'
 
 const ASSESSMENT_QUESTIONS = [
   {
@@ -51,6 +53,7 @@ interface AssessmentData {
 }
 
 export default function UserAssessment({ onComplete }: { onComplete: () => void }) {
+  const { user } = useAuth()
   const { setUserAssessment } = useAppStore()
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -77,28 +80,63 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
   const handleComplete = async () => {
     setLoading(true)
 
-    // Criar objeto com as respostas do usuário
-    const assessmentData = {
-      studentLevel: responses[1] || '',
-      studyTime: responses[4] || '',
-      goal: responses[1] || '',
-      difficulties: responses[2] || '',
-      learningPreference: responses[3] || '',
-      knowledgeLevel: responses[5] || '',
+    if (!user) {
+      toast.error('Você precisa estar logado para salvar suas preferências.')
+      setLoading(false)
+      return
     }
 
-    // Salvar no store (Zustand)
-    setUserAssessment(assessmentData)
-    toast.success('Avaliação concluída com sucesso!')
+    try {
+      // Dados para o Supabase (snake_case)
+      const assessmentDataForSupabase = {
+        user_id: user.id,
+        goal: responses[1] || '',
+        difficulties: responses[2] || '',
+        learning_preference: responses[3] || '',
+        study_time: responses[4] || '',
+        student_level: responses[5] || '',
+        knowledge_level: responses[5] || '',
+      }
 
-    setLoading(false)
-    onComplete()
+      // Salvar no Supabase
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert(assessmentDataForSupabase, { onConflict: 'user_id' })
+
+      if (error) {
+        throw error
+      }
+
+      // Dados para o Store (camelCase)
+      const assessmentDataForStore = {
+        studentLevel: responses[5] || '',
+        studyTime: responses[4] || '',
+        goal: responses[1] || '',
+        difficulties: responses[2] || '',
+        learningPreference: responses[3] || '',
+        knowledgeLevel: responses[5] || '',
+      }
+
+      // Atualizar o store
+      setUserAssessment(assessmentDataForStore)
+      
+      // Marcar como completo
+      localStorage.setItem('onboarding_completed', 'true')
+      toast.success('Avaliação concluída e salva com sucesso!')
+
+      setLoading(false)
+      onComplete()
+    } catch (error: any) {
+      console.error('Erro ao salvar avaliação:', error)
+      toast.error(`Erro ao salvar sua avaliação: ${error.message}`)
+      setLoading(false)
+    }
   }
 
   const handleSkip = () => {
-    // Salvar o que foi respondido, mesmo se pular
+    // Dados para o Store (camelCase)
     const assessmentData = {
-      studentLevel: responses[1] || '',
+      studentLevel: responses[5] || '',
       studyTime: responses[4] || '',
       goal: responses[1] || '',
       difficulties: responses[2] || '',
@@ -107,14 +145,14 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
     }
 
     setUserAssessment(assessmentData)
-    toast.info('Avaliação salva. Você pode completar depois nas configurações.')
+    localStorage.setItem('onboarding_completed', 'true')
+    toast.info('Avaliação salva localmente. Você pode completar depois nas configurações.')
     onComplete()
   }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <Card className="max-w-2xl w-full bg-white border-beige-300 relative">
-        {/* ✅ Botão de Fechar no Canto Superior Direito */}
         <button
           onClick={handleSkip}
           className="absolute top-4 right-4 p-2 text-darkBlue-500 hover:bg-beige-100 rounded-full transition-colors"
@@ -148,7 +186,6 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
                 <p className="text-sm text-darkBlue-500 mt-1">{currentQuestion.description}</p>
               </div>
 
-              {/* ✅ Textarea para respostas discursivas */}
               <Textarea
                 value={responses[step] || ''}
                 onChange={(e) => handleInputChange(e.target.value)}
@@ -186,7 +223,6 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
             </Button>
 
             <div className="flex gap-2">
-              {/* ✅ Botão Pular */}
               <Button
                 variant="ghost"
                 onClick={handleSkip}
@@ -197,7 +233,6 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
                 Pular
               </Button>
 
-              {/* ✅ Botão Próximo/Concluir */}
               {step < totalSteps ? (
                 <Button
                   onClick={handleNext}

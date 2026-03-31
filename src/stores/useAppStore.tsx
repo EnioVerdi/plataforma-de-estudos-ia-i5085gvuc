@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 
-// Interface para um flashcard com informações de revisão
 export interface FlashcardWithReview {
   id: string
   question: string
@@ -13,7 +12,6 @@ export interface FlashcardWithReview {
   createdAt: string
 }
 
-// ✅ INTERFACE ATUALIZADA: Suporta respostas discursivas
 export interface UserAssessmentData {
   studentLevel: string
   studyTime: string
@@ -23,20 +21,17 @@ export interface UserAssessmentData {
   knowledgeLevel?: string
 }
 
-// Interface para uma matéria/disciplina
 export interface Subject {
   id: string
   name: string
 }
 
-// Interface para as métricas diárias de estudo
 export interface DailyMetric {
   date: string
   studyTime: number
   flashcardsReviewed: number
 }
 
-// ✅ NOVO: Interface para dados do gráfico de dificuldade
 export interface DifficultyStats {
   difficulty: number
   label: string
@@ -45,7 +40,6 @@ export interface DifficultyStats {
   bg: string
 }
 
-// ✅ NOVO: Interface para templates de prompts
 export interface PromptTemplate {
   subjectId: string
   subjectName: string
@@ -53,7 +47,6 @@ export interface PromptTemplate {
   example: string
 }
 
-// ✅ NOVO: Interface para notificação de revisão
 export interface ReviewNotification {
   date: string
   totalCards: number
@@ -64,25 +57,19 @@ export interface ReviewNotification {
   }>
 }
 
-// Interface para o estado global da aplicação
 interface AppState {
   subjects: Subject[]
   flashcards: FlashcardWithReview[]
   userAssessment: UserAssessmentData | null
   chatContext: string
   metrics: DailyMetric[]
-
-  // ✅ ADICIONADO: Propriedades para o sistema de ofensiva (streak)
   studyStreak: {
     current: number
     max: number
   }
   lastStudyDate: string | null
 
-  // Funções para gerenciar matérias
   addSubject: (subject: Subject) => void
-
-  // Funções para gerenciar flashcards
   addFlashcard: (
     card: Omit<
       FlashcardWithReview,
@@ -92,35 +79,22 @@ interface AppState {
   deleteFlashcard: (id: string) => void
   updateFlashcardDifficulty: (cardId: string, difficulty: 1 | 2 | 3 | 4 | 5) => void
   getFlashcardsForToday: () => FlashcardWithReview[]
-
-  // Funções para gerenciar avaliação do usuário
   setUserAssessment: (assessment: UserAssessmentData) => void
   setChatContext: (context: string) => void
-
-  // Funções para gerenciar métricas diárias
   addOrUpdateMetric: (date: string, studyTime: number, flashcardsReviewed: number) => void
   updateDayMetrics: (type: 'studyTime' | 'flashcardsReviewed', value: number) => void
-
-  // ✅ NOVO: Funções para estatísticas de dificuldade (para o gráfico)
   getDifficultyStats: () => DifficultyStats[]
-
-  // ✅ NOVO: Função para obter template de prompts
   getPromptTemplate: (subjectId: string) => PromptTemplate | undefined
-
-  // ✅ NOVO: Funções para email de revisão diária
   getTodayReviewSummary: () => ReviewNotification
   sendDailyReviewEmail: (
     userEmail: string,
     userName: string,
   ) => Promise<{ success: boolean; data?: any; error?: any }>
-
-  // ✅ ADICIONADO: Funções para gerenciar a ofensiva (streak)
   updateStudyStreak: () => void
   resetStreak: () => void
   incrementStreak: () => void
 }
 
-// ✅ NOVO: Templates de prompts por matéria
 const PROMPT_TEMPLATES: PromptTemplate[] = [
   {
     subjectId: '1',
@@ -244,7 +218,6 @@ const PROMPT_TEMPLATES: PromptTemplate[] = [
   },
 ]
 
-// Função auxiliar para calcular a próxima data de revisão
 const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
   const now = new Date()
   let daysToAdd = 1
@@ -271,9 +244,7 @@ const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
   return now.toISOString().split('T')[0]
 }
 
-// Cria o store Zustand
 const useAppStore = create<AppState>((set, get) => {
-  // Carrega dados do localStorage
   const storedStreak =
     typeof window !== 'undefined'
       ? JSON.parse(localStorage.getItem('studyStreak') || '{"current": 0, "max": 0}')
@@ -283,7 +254,6 @@ const useAppStore = create<AppState>((set, get) => {
     typeof window !== 'undefined' ? localStorage.getItem('lastStudyDate') : null
 
   return {
-    // Estado inicial
     subjects: [
       { id: '1', name: 'Português' },
       { id: '2', name: 'Matemática' },
@@ -305,14 +275,12 @@ const useAppStore = create<AppState>((set, get) => {
     studyStreak: storedStreak,
     lastStudyDate: storedLastStudyDate,
 
-    // ✅ Adiciona uma nova matéria
     addSubject: (subject) => {
       set((state) => ({
         subjects: [...state.subjects, subject],
       }))
     },
 
-    // ✅ Adiciona um novo flashcard
     addFlashcard: (card) => {
       set((state) => ({
         flashcards: [
@@ -329,14 +297,12 @@ const useAppStore = create<AppState>((set, get) => {
       }))
     },
 
-    // ✅ Exclui um flashcard
     deleteFlashcard: (id) => {
       set((state) => ({
         flashcards: state.flashcards.filter((c) => c.id !== id),
       }))
     },
 
-    // ✅ Atualiza a dificuldade de um flashcard
     updateFlashcardDifficulty: (cardId, difficulty) => {
       set((state) => ({
         flashcards: state.flashcards.map((card) =>
@@ -353,7 +319,6 @@ const useAppStore = create<AppState>((set, get) => {
       }))
     },
 
-    // ✅ Retorna flashcards para revisar hoje
     getFlashcardsForToday: () => {
       const today = new Date().toISOString().split('T')[0]
       return get().flashcards.filter((card) => {
@@ -362,7 +327,6 @@ const useAppStore = create<AppState>((set, get) => {
       })
     },
 
-    // ✅ NOVO: Retorna estatísticas de dificuldade para o gráfico
     getDifficultyStats: () => {
       const flashcards = get().flashcards
 
@@ -381,16 +345,13 @@ const useAppStore = create<AppState>((set, get) => {
         }
       })
 
-      // Ordena do mais difícil para o mais fácil
       return stats.sort((a, b) => b.difficulty - a.difficulty)
     },
 
-    // ✅ NOVO: Obtém template de prompt por matéria
     getPromptTemplate: (subjectId) => {
       return PROMPT_TEMPLATES.find((t) => t.subjectId === subjectId)
     },
 
-    // ✅ NOVO: Retorna resumo de revisão para hoje
     getTodayReviewSummary: () => {
       const today = new Date().toISOString().split('T')[0]
       const dueCards = get().flashcards.filter((card) => {
@@ -414,7 +375,6 @@ const useAppStore = create<AppState>((set, get) => {
       }
     },
 
-    // ✅ NOVO: Envia email de revisão diária
     sendDailyReviewEmail: async (userEmail: string, userName: string) => {
       try {
         const summary = get().getTodayReviewSummary()
@@ -425,9 +385,6 @@ const useAppStore = create<AppState>((set, get) => {
             data: { message: 'Nenhuma revisão pendente para hoje' },
           }
         }
-
-        // TODO: Implement email sending functionality
-        // const response = await sendEmailFunction({ ... })
 
         return {
           success: true,
@@ -442,17 +399,15 @@ const useAppStore = create<AppState>((set, get) => {
       }
     },
 
-    // ✅ Define avaliação do usuário
-    setUserAssessment: (assessment) => {
+    setUserAssessment: (assessment: UserAssessmentData) => {
       set({ userAssessment: assessment })
+      console.log('DEBUG - setUserAssessment chamado com:', assessment)
     },
 
-    // ✅ Define contexto do chat
     setChatContext: (context) => {
       set({ chatContext: context })
     },
 
-    // ✅ Adiciona ou atualiza métrica diária
     addOrUpdateMetric: (date, studyTime, flashcardsReviewed) => {
       set((state) => {
         const existingIndex = state.metrics.findIndex((m) => m.date === date)
@@ -465,7 +420,6 @@ const useAppStore = create<AppState>((set, get) => {
       })
     },
 
-    // ✅ Atualiza métrica do dia atual
     updateDayMetrics: (type, value) => {
       const today = new Date().toISOString().split('T')[0]
       set((state) => {
@@ -491,7 +445,6 @@ const useAppStore = create<AppState>((set, get) => {
       })
     },
 
-    // ✅ NOVO: Atualiza a ofensiva diária
     updateStudyStreak: () => {
       set((state) => {
         const today = new Date()
@@ -532,7 +485,6 @@ const useAppStore = create<AppState>((set, get) => {
       })
     },
 
-    // ✅ NOVO: Reinicia a ofensiva
     resetStreak: () => {
       set(() => {
         if (typeof window !== 'undefined') {
@@ -546,7 +498,6 @@ const useAppStore = create<AppState>((set, get) => {
       })
     },
 
-    // ✅ NOVO: Incrementa manualmente a ofensiva
     incrementStreak: () => {
       set((state) => {
         const todayStr = new Date().toISOString().split('T')[0]

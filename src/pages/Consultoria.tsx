@@ -32,7 +32,7 @@ interface Message {
 
 export default function Consultoria() {
   const { user } = useAuth()
-  const { chatContext, setChatContext } = useAppStore()
+  const { chatContext, setChatContext, userAssessment } = useAppStore()
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'initial-ai',
@@ -95,15 +95,70 @@ export default function Consultoria() {
   const handleConsult = async (userQuery: string) => {
     setIsTyping(true)
     try {
-      const systemPrompt = `Você é um consultor de estudos especializado em preparação para o vestibular da UFPR. 
-REGRAS: Responda EXATAMENTE e SOMENTE o que o usuário pediu, de forma clara, objetiva e prática. Máximo 150 palavras. NÃO adicione introduções, explicações extras ou conteúdo desnecessário. Divida assuntos complexos em partes menores se necessário, usando analogias simples.
+      let systemPrompt = `Atue como um Professor Particular de Elite e Especialista em Didática para o Ensino Médio e Vestibulares do Brasil.
 
-No FINAL da resposta, sugira 1-2 opções relevantes:
-- "Quer um exemplo prático disso?"
-- "Quer saber como os vestibulares (Enem/UFPR) cobram esse assunto?"
-- "Quer uma explicação mais aprofundada?"
+Seu Objetivo: Preparar um aluno do 3º ano do ensino médio para os exames mais concorridos do país (ENEM, Fuvest, Unicamp e Federais), focando em uma didática excepcional, construção de base sólida e alto rendimento para cursos de exatas e tecnologia (como Engenharia de Software e Ciência da Computação).
 
-Seja direto e útil.`
+Sua Didática e Metodologia de Ensino:
+
+Nivelamento Progressivo: Nunca presuma que o aluno sabe a base. Comece explicando o conceito de forma simples e intuitiva. Só depois aprofunde para o nível de complexidade cobrado nos vestibulares paulistas e no ENEM.
+
+Analogias Memoráveis: Transforme conceitos abstratos de Física, Química, Biologia ou Matemática em situações do dia a dia ou em sistemas lógicos/tecnológicos. Facilite a visualização mental.
+
+Método Socrático Guiado: Quando o aluno enviar uma dúvida ou errar uma questão, não dê a resposta de imediato. Faça perguntas estratégicas que o guiem até a conclusão correta. Mostre onde o raciocínio falhou.
+
+Engenharia Reversa de Questões: Ao explicar uma questão, desconstrua as alternativas. Explique não apenas por que a alternativa correta está certa, mas exatamente qual foi a "pegadinha" que tornou as outras incorretas.
+
+Adaptação por Banca: Se o aluno mencionar um vestibular específico em uma pergunta (ex: "Como isso cai no ENEM?"), adapte a explicação. Para o ENEM, foque em interpretação e aplicação prática (TRI); para Fuvest/Unicamp, foque em profundidade teórica e fórmulas.
+
+Ferramentas de Estudo:
+
+Revisão Ativa (Anki): Sempre que explicar um conceito novo ou fizer um resumo, gere automaticamente no final da resposta 3 a 5 Flashcards de fixação no formato Frente/Verso, prontos para copiar e colar.
+
+Gestão de Tempo: Sugira divisões de estudo baseadas em ciclos de foco (método Pomodoro), dividindo a teoria e a prática de forma equilibrada.
+
+Formatação e Comunicação:
+
+Use parágrafos curtos. Textos longos e densos atrapalham a absorção.
+
+Use negrito para destacar palavras-chave, fórmulas e conceitos centrais.
+
+Mantenha um tom encorajador, paciente e analítico. Celebre os acertos e trate os erros como degraus de aprendizado.`
+
+      console.log('DEBUG - Consultoria: userAssessment completo:', userAssessment)
+
+      if (userAssessment && Object.keys(userAssessment).length > 0) {
+        console.log('DEBUG - Consultoria: userAssessment encontrado, adicionando ao prompt.')
+        systemPrompt += `
+
+IMPORTANTE: Personalize TODAS as suas respostas baseado no perfil específico do aluno abaixo. Adapte a profundidade, velocidade e estilo de explicação exatamente conforme as preferências dele:
+
+Perfil do Aluno:
+- Nível de Conhecimento: ${userAssessment.studentLevel || 'Não informado'}
+- Tempo Disponível para Estudo: ${userAssessment.studyTime || 'Não informado'}
+- Objetivo Principal: ${userAssessment.goal || 'Não informado'}
+- Principais Dificuldades: ${userAssessment.difficulties || 'Não informado'}
+- Estilo de Aprendizado Preferido: ${userAssessment.learningPreference || 'Não informado'}
+- Conhecimento Geral: ${userAssessment.knowledgeLevel || 'Não informado'}
+
+Use OBRIGATORIAMENTE essas informações para:
+1. Ajustar o nível de profundidade das explicações
+2. Usar exemplos relacionados às dificuldades específicas mencionadas
+3. Aplicar o método de aprendizado preferido (prático, visual, teórico, etc)
+4. Considerar o tempo disponível ao sugerir cronogramas
+5. Direcionar para o objetivo específico do aluno`
+      } else {
+        console.log('DEBUG - Consultoria: userAssessment vazio ou não carregado, usando prompt genérico.')
+      }
+
+      const conversationHistory = messages
+        .filter((msg) => msg.role !== undefined)
+        .map((msg) => ({
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content,
+        }))
+
+      console.log('DEBUG - Consultoria: Histórico de conversa enviado à IA:', conversationHistory)
 
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
@@ -115,6 +170,7 @@ Seja direto e útil.`
           model: 'llama-3.3-70b-versatile',
           messages: [
             { role: 'system', content: systemPrompt },
+            ...conversationHistory,
             { role: 'user', content: userQuery },
           ],
           temperature: 0.7,
@@ -136,17 +192,15 @@ Seja direto e útil.`
       ])
 
       if (user) {
-        await supabase
-          .from('consultation_sessions')
-          .insert({
-            user_id: user.id,
-            query: userQuery,
-            response: aiResponse,
-            timestamp: new Date().toISOString(),
-          })
+        await supabase.from('consultation_sessions').insert({
+          user_id: user.id,
+          query: userQuery,
+          response: aiResponse,
+          timestamp: new Date().toISOString(),
+        })
       }
     } catch (error) {
-      console.error('Erro ao consultar IA:', error)
+      console.error('DEBUG - Consultoria: Erro ao consultar IA:', error)
       const errorResponse =
         'Desculpe, ocorreu um erro ao conectar com a IA. Verifique sua conexão e tente novamente.'
       setMessages((prev) => [
@@ -158,9 +212,9 @@ Seja direto e útil.`
     }
   }
 
-  const handleSend = (e?: React.FormEvent) => {
+  const handleSend = (e?: React.FormEvent, presetQuery?: string) => {
     e?.preventDefault()
-    const text = input.trim()
+    const text = presetQuery || input.trim()
     if (!text) return
 
     setMessages((prev) => [
@@ -186,7 +240,7 @@ Seja direto e útil.`
       ])
       toast.success('Histórico de conversas limpo com sucesso!')
     } catch (error) {
-      console.error('Erro ao limpar histórico:', error)
+      console.error('DEBUG - Consultoria: Erro ao limpar histórico:', error)
       toast.error('Erro ao limpar histórico de conversas.')
     }
   }
@@ -305,7 +359,7 @@ Seja direto e útil.`
                 key={p.label}
                 variant="outline"
                 size="sm"
-                onClick={() => handleSend()}
+                onClick={() => handleSend(undefined, p.label)}
                 className="shrink-0 rounded-full border-darkBlue-200 hover:bg-beige-100 text-xs md:text-sm text-darkBlue-700"
               >
                 <p.icon className="w-3.5 h-3.5 mr-1.5 text-darkBlue-500" />

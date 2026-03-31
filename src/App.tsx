@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from './hooks/use-auth'
+import { useOnboarding } from './hooks/useOnboarding'
 import Layout from './components/Layout'
 import Index from './pages/Index'
 import Flashcards from './pages/Flashcards'
@@ -14,6 +15,7 @@ import CheckEmail from './pages/auth/CheckEmail'
 import Onboarding from './pages/Onboarding'
 import FlashcardsChat from './pages/FlashcardsChat'
 import NotFound from './pages/NotFound'
+import UserAssessment from './components/UserAssessment'
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth()
@@ -22,39 +24,52 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>
 }
 
+const AppContent = () => {
+  const { showAssessment, setShowAssessment } = useOnboarding()
+
+  return (
+    <>
+      {showAssessment && (
+        <UserAssessment onComplete={() => setShowAssessment(false)} />
+      )}
+      <Routes>
+        <Route path="/auth/register" element={<Register />} />
+        <Route path="/auth/check-email" element={<CheckEmail />} />
+        <Route
+          path="/onboarding"
+          element={
+            <ProtectedRoute>
+              <Onboarding />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/" element={<Index />} />
+          <Route path="/flashcards" element={<Flashcards />} />
+          <Route path="/study/:subjectId" element={<Study />} />
+          <Route path="/consultoria" element={<Consultoria />} />
+          <Route path="/flashcards-chat" element={<FlashcardsChat />} />
+          <Route path="/settings" element={<Settings />} />
+        </Route>
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
+  )
+}
+
 const App = () => (
   <AuthProvider>
     <BrowserRouter>
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <Routes>
-          <Route path="/auth/register" element={<Register />} />
-          <Route path="/auth/check-email" element={<CheckEmail />} />
-          <Route
-            path="/onboarding"
-            element={
-              <ProtectedRoute>
-                <Onboarding />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/" element={<Index />} />
-            <Route path="/flashcards" element={<Flashcards />} />
-            <Route path="/study/:subjectId" element={<Study />} />
-            <Route path="/consultoria" element={<Consultoria />} />
-            <Route path="/flashcards-chat" element={<FlashcardsChat />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AppContent />
       </TooltipProvider>
     </BrowserRouter>
   </AuthProvider>
