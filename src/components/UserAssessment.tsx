@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, CheckCircle2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, X, Loader2 } from 'lucide-react'
 import useAppStore from '@/stores/useAppStore'
 import { supabase } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
@@ -79,15 +79,16 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
 
   const handleComplete = async () => {
     setLoading(true)
+    console.log('DEBUG - UserAssessment: Iniciando handleComplete.')
 
     if (!user) {
+      console.error('DEBUG - UserAssessment: Usuário não logado ao tentar salvar avaliação.')
       toast.error('Você precisa estar logado para salvar suas preferências.')
       setLoading(false)
       return
     }
 
     try {
-      // Dados para o Supabase (snake_case)
       const assessmentDataForSupabase = {
         user_id: user.id,
         goal: responses[1] || '',
@@ -97,17 +98,18 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
         student_level: responses[5] || '',
         knowledge_level: responses[5] || '',
       }
+      console.log('DEBUG - UserAssessment: Dados para Supabase:', assessmentDataForSupabase)
 
-      // Salvar no Supabase
       const { error } = await supabase
         .from('user_preferences')
         .upsert(assessmentDataForSupabase, { onConflict: 'user_id' })
 
       if (error) {
+        console.error('DEBUG - UserAssessment: Erro ao salvar no Supabase:', error)
         throw error
       }
+      console.log('DEBUG - UserAssessment: Dados salvos no Supabase com sucesso.')
 
-      // Dados para o Store (camelCase)
       const assessmentDataForStore = {
         studentLevel: responses[5] || '',
         studyTime: responses[4] || '',
@@ -116,25 +118,25 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
         learningPreference: responses[3] || '',
         knowledgeLevel: responses[5] || '',
       }
+      console.log('DEBUG - UserAssessment: Dados para o store:', assessmentDataForStore)
 
-      // Atualizar o store
       setUserAssessment(assessmentDataForStore)
-      
-      // Marcar como completo
+
       localStorage.setItem('onboarding_completed', 'true')
+      console.log('DEBUG - UserAssessment: localStorage "onboarding_completed" definido como true.')
       toast.success('Avaliação concluída e salva com sucesso!')
 
       setLoading(false)
       onComplete()
     } catch (error: any) {
-      console.error('Erro ao salvar avaliação:', error)
-      toast.error(`Erro ao salvar sua avaliação: ${error.message}`)
+      console.error('DEBUG - UserAssessment: Erro crítico ao salvar avaliação:', error)
+      toast.error(`Erro ao salvar sua avaliação: ${error.message || 'Verifique o console para mais detalhes.'}`)
       setLoading(false)
     }
   }
 
   const handleSkip = () => {
-    // Dados para o Store (camelCase)
+    console.log('DEBUG - UserAssessment: Avaliação pulada.')
     const assessmentData = {
       studentLevel: responses[5] || '',
       studyTime: responses[4] || '',
@@ -157,6 +159,7 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
           onClick={handleSkip}
           className="absolute top-4 right-4 p-2 text-darkBlue-500 hover:bg-beige-100 rounded-full transition-colors"
           aria-label="Fechar"
+          disabled={loading}
         >
           <X className="w-5 h-5" />
         </button>
@@ -191,6 +194,7 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
                 onChange={(e) => handleInputChange(e.target.value)}
                 placeholder={currentQuestion.placeholder}
                 className="min-h-[150px] rounded-xl border-beige-300 bg-beige-50 text-darkBlue-700 focus-visible:ring-darkBlue-500 resize-none"
+                disabled={loading}
               />
 
               <p className="text-xs text-darkBlue-400">
@@ -215,7 +219,7 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
             <Button
               variant="outline"
               onClick={() => setStep(Math.max(1, step - 1))}
-              disabled={step === 1}
+              disabled={step === 1 || loading}
               className="border-beige-300 text-darkBlue-700 hover:bg-beige-100"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
@@ -237,6 +241,7 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
                 <Button
                   onClick={handleNext}
                   className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+                  disabled={loading}
                 >
                   Próximo
                   <ArrowRight className="w-4 h-4 ml-2" />
@@ -247,8 +252,15 @@ export default function UserAssessment({ onComplete }: { onComplete: () => void 
                   disabled={loading}
                   className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
                 >
-                  {loading ? 'Salvando...' : 'Concluir Avaliação'}
-                  <CheckCircle2 className="w-4 h-4 ml-2" />
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Salvando...
+                    </>
+                  ) : (
+                    <>
+                      Concluir Avaliação <CheckCircle2 className="w-4 h-4 ml-2" />
+                    </>
+                  )}
                 </Button>
               )}
             </div>
