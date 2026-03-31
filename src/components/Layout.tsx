@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   Sidebar,
   SidebarProvider,
@@ -26,7 +26,8 @@ import useAppStore from '@/stores/useAppStore'
 
 export default function Layout() {
   const location = useLocation()
-  const { user } = useAuth()
+  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
   const { studyStreak } = useAppStore()
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
@@ -45,6 +46,11 @@ export default function Layout() {
   const title = navItems.find((n) => n.path === location.pathname)?.label || 'Dashboard'
 
   const initials = user?.email?.substring(0, 2).toUpperCase() || 'US'
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/auth/register')
+  }
 
   return (
     <SidebarProvider>
@@ -120,7 +126,12 @@ export default function Layout() {
                   <DropdownMenuSeparator className="bg-beige-200" />
                   <DropdownMenuItem className="hover:bg-beige-100">Perfil</DropdownMenuItem>
                   <DropdownMenuItem className="hover:bg-beige-100">Estatísticas</DropdownMenuItem>
-                  <DropdownMenuItem className="text-red-500 hover:bg-red-50">Sair</DropdownMenuItem>
+                  <DropdownMenuItem 
+                    className="text-red-500 hover:bg-red-50 cursor-pointer"
+                    onClick={handleSignOut}
+                  >
+                    Sair
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
-import { BellRing, Plane, User, LogOut } from 'lucide-react'
+import { Plane, User, LogOut } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
@@ -23,9 +23,6 @@ export default function Settings() {
   const navigate = useNavigate()
   const [profile, setProfile] = useState({ name: '' })
   const [settings, setSettings] = useState({
-    email_enabled: true,
-    preferred_time: '08:00',
-    frequency: 'daily',
     vacation_mode: false,
   })
   const [loading, setLoading] = useState(false)
@@ -33,12 +30,8 @@ export default function Settings() {
   useEffect(() => {
     const load = async () => {
       if (!user) return
-      const [profRes, setRes] = await Promise.all([
-        supabase.from('profiles').select('name').eq('id', user.id).maybeSingle(),
-        supabase.from('reminder_settings').select('*').eq('user_id', user.id).maybeSingle(),
-      ])
+      const profRes = await supabase.from('profiles').select('name').eq('id', user.id).maybeSingle()
       if (profRes.data) setProfile({ name: profRes.data.name || '' })
-      if (setRes.data) setSettings(setRes.data)
     }
     load()
   }, [user])
@@ -46,10 +39,7 @@ export default function Settings() {
   const handleSave = async () => {
     if (!user) return
     setLoading(true)
-    await Promise.all([
-      supabase.from('profiles').update({ name: profile.name }).eq('id', user.id),
-      supabase.from('reminder_settings').upsert({ user_id: user.id, ...settings }),
-    ])
+    await supabase.from('profiles').update({ name: profile.name }).eq('id', user.id)
     setLoading(false)
     toast({
       title: 'Configurações salvas',
@@ -67,64 +57,11 @@ export default function Settings() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
         <p className="text-muted-foreground mt-1">
-          Gerencie suas notificações e preferências de estudo.
+          Gerencie suas preferências de estudo.
         </p>
       </div>
 
       <div className="grid gap-6">
-        <Card className="border-0 ring-1 ring-border shadow-sm">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <BellRing className="h-5 w-5 text-primary" />
-              <CardTitle>Notificações e Lembretes</CardTitle>
-            </div>
-            <CardDescription>
-              Configure como e quando você quer ser lembrado de estudar.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label className="text-base">E-mail de Lembretes</Label>
-                <p className="text-sm text-muted-foreground">
-                  Receba um resumo das revisões pendentes.
-                </p>
-              </div>
-              <Switch
-                checked={settings.email_enabled}
-                onCheckedChange={(v) => setSettings({ ...settings, email_enabled: v })}
-              />
-            </div>
-            <Separator />
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Horário preferido</Label>
-                <Input
-                  type="time"
-                  value={settings.preferred_time}
-                  onChange={(e) => setSettings({ ...settings, preferred_time: e.target.value })}
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Frequência</Label>
-                <Select
-                  value={settings.frequency}
-                  onValueChange={(v) => setSettings({ ...settings, frequency: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Diariamente</SelectItem>
-                    <SelectItem value="weekly">Semanalmente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="border-0 ring-1 ring-border shadow-sm">
           <CardHeader>
             <div className="flex items-center gap-2">

@@ -52,8 +52,6 @@ const DIFFICULTY_COLORS = {
   5: { label: 'Muito Difícil', color: '#9333ea', bg: '#faf5ff' },
 }
 
-const FLASHCARD_LIMIT_PER_SUBJECT = 20
-
 const formatNextReviewDate = (nextReviewAt: string): string => {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -78,8 +76,6 @@ export default function Flashcards() {
     deleteFlashcard,
     updateFlashcardDifficulty,
     getFlashcardsForToday,
-    getFlashcardsCountBySubject,
-    canAddFlashcard,
     loadFlashcardsFromSupabase,
   } = useAppStore()
 
@@ -127,10 +123,6 @@ export default function Flashcards() {
   const handleAdd = () => {
     if (!newCard.question || !newCard.answer || !newCard.subjectId) {
       toast.error('Preencha todos os campos.')
-      return
-    }
-    if (!canAddFlashcard(newCard.subjectId)) {
-      toast.error(`Limite de ${FLASHCARD_LIMIT_PER_SUBJECT} flashcards atingido para esta matéria.`)
       return
     }
     addFlashcard({
@@ -208,8 +200,8 @@ export default function Flashcards() {
                     </SelectTrigger>
                     <SelectContent className="bg-white border-beige-300 text-darkBlue-700">
                       {subjects.map((s) => (
-                        <SelectItem key={s.id} value={s.id} disabled={!canAddFlashcard(s.id)}>
-                          {s.name} ({getFlashcardsCountBySubject(s.id)}/{FLASHCARD_LIMIT_PER_SUBJECT})
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -256,7 +248,7 @@ export default function Flashcards() {
                 <Button
                   onClick={handleAdd}
                   className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
-                  disabled={!newCard.subjectId || !canAddFlashcard(newCard.subjectId)}
+                  disabled={!newCard.subjectId}
                 >
                   Salvar Cartão
                 </Button>
@@ -297,8 +289,6 @@ export default function Flashcards() {
                 const reviewDate = c.nextReviewAt.split('T')[0]
                 return reviewDate <= todayStr
               }).length
-              const currentCount = getFlashcardsCountBySubject(subject.id)
-              const isLimitReached = currentCount >= FLASHCARD_LIMIT_PER_SUBJECT
 
               return (
                 <Card
@@ -307,10 +297,6 @@ export default function Flashcards() {
                 >
                   <CardHeader className="pb-3">
                     <CardTitle className="text-xl text-darkBlue-700">{subject.name}</CardTitle>
-                    <CardDescription className="text-sm text-darkBlue-500">
-                      {currentCount}/{FLASHCARD_LIMIT_PER_SUBJECT} cartões
-                      {isLimitReached && <span className="text-red-500 ml-2">(Limite Atingido)</span>}
-                    </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="flex justify-between items-end mt-4">

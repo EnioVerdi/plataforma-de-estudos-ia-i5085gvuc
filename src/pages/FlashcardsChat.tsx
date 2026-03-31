@@ -40,11 +40,10 @@ const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 const MAX_MESSAGES = 50
 const MESSAGE_RETENTION_DAYS = 14
-const FLASHCARD_LIMIT_PER_SUBJECT = 20
 
 export default function FlashcardsChat(): React.JSX.Element {
   const { user } = useAuth()
-  const { subjects, addFlashcard, userAssessment, getPromptTemplate, loadFlashcardsFromSupabase, getFlashcardsCountBySubject, canAddFlashcard } = useAppStore()
+  const { subjects, addFlashcard, userAssessment, getPromptTemplate, loadFlashcardsFromSupabase } = useAppStore()
   const [showAssessment, setShowAssessment] = useState(!userAssessment)
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -201,14 +200,6 @@ export default function FlashcardsChat(): React.JSX.Element {
       return
     }
 
-    // ✅ VALIDAÇÃO: Verifica se pode adicionar mais flashcards
-    if (!canAddFlashcard(selectedSubject)) {
-      console.log('DEBUG - FlashcardsChat: ERRO - Limite de flashcards atingido para a matéria:', selectedSubject)
-      toast.error(`Limite de ${FLASHCARD_LIMIT_PER_SUBJECT} flashcards atingido para esta matéria.`)
-      setIsLoading(false)
-      return
-    }
-
     console.log('DEBUG - FlashcardsChat: Matéria selecionada com sucesso:', selectedSubject)
 
     try {
@@ -257,40 +248,19 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
         const subjectToUse = selectedSubject || subjects[0]?.id
 
         if (subjectToUse) {
-          let flashcardsAddedCount = 0
-          for (const card of parsedFlashcards) {
-            // ✅ Verifica limite antes de adicionar cada flashcard
-            if (canAddFlashcard(subjectToUse)) {
-              addFlashcard({
-                question: card.question,
-                answer: card.answer,
-                subjectId: subjectToUse,
-                difficulty: 3,
-              })
-              flashcardsAddedCount++
-            } else {
-              console.log('DEBUG - FlashcardsChat: Limite atingido, parando adição de flashcards.')
-              break
-            }
-          }
+          parsedFlashcards.forEach((card) => {
+            addFlashcard({
+              question: card.question,
+              answer: card.answer,
+              subjectId: subjectToUse,
+              difficulty: 3,
+            })
+          })
 
           const subjectName = subjects.find((s) => s.id === subjectToUse)?.name || 'matéria'
-          const currentCount = getFlashcardsCountBySubject(subjectToUse)
-          const remainingSlots = FLASHCARD_LIMIT_PER_SUBJECT - currentCount
+          chatMessage = `✅ **${parsedFlashcards.length} flashcard${parsedFlashcards.length > 1 ? 's' : ''}** foi${parsedFlashcards.length > 1 ? 'ram' : ''} adicionado${parsedFlashcards.length > 1 ? 's' : ''} à matéria **${subjectName}**! 🎯`
 
-          if (flashcardsAddedCount > 0) {
-            chatMessage = `✅ **${flashcardsAddedCount} flashcard${flashcardsAddedCount > 1 ? 's' : ''}** foi${flashcardsAddedCount > 1 ? 'ram' : ''} adicionado${flashcardsAddedCount > 1 ? 's' : ''} à matéria **${subjectName}**!\n\n`
-
-            if (remainingSlots > 0) {
-              chatMessage += `Você pode adicionar mais ${remainingSlots} flashcard${remainingSlots > 1 ? 's' : ''} a esta matéria. 🎯`
-            } else {
-              chatMessage += `Limite de ${FLASHCARD_LIMIT_PER_SUBJECT} flashcards atingido para esta matéria. 🛑`
-            }
-          } else {
-            chatMessage = `Não consegui adicionar flashcards ou o limite foi atingido para esta matéria.`
-          }
-
-          console.log(`Flashcards criados: ${flashcardsAddedCount} na matéria ${subjectName}`)
+          console.log(`Flashcards criados: ${parsedFlashcards.length} na matéria ${subjectName}`)
         } else {
           chatMessage = '⚠️ Selecione uma matéria para adicionar flashcards.'
         }
@@ -359,7 +329,6 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
   }
 
   const currentTemplate = selectedSubject ? getPromptTemplate(selectedSubject) : null
-  const isSubjectLimitReached = selectedSubject ? !canAddFlashcard(selectedSubject) : false
 
   if (showAssessment && userAssessment === null) {
     return <UserAssessment onComplete={() => setShowAssessment(false)} />
@@ -378,7 +347,7 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
             <option value="">Selecione...</option>
             {subjects.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.name} ({getFlashcardsCountBySubject(s.id)}/{FLASHCARD_LIMIT_PER_SUBJECT})
+                {s.name}
               </option>
             ))}
           </select>
@@ -502,15 +471,15 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder={selectedSubject ? (isSubjectLimitReached ? "Limite de flashcards atingido para esta matéria." : "Descreva o conteúdo...") : "Selecione a matéria antes..."}
+                placeholder={selectedSubject ? "Descreva o conteúdo..." : "Selecione a matéria antes..."}
                 className="rounded-xl h-12 bg-beige-50 border-beige-300 focus-visible:ring-darkBlue-500 shadow-sm text-darkBlue-700"
-                disabled={!selectedSubject || isLoading || isSubjectLimitReached}
+                disabled={!selectedSubject || isLoading}
               />
               <Button
                 type="submit"
                 size="icon"
                 className="h-12 w-12 rounded-xl shrink-0 shadow-sm bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
-                disabled={!input.trim() || isLoading || !selectedSubject || isSubjectLimitReached}
+                disabled={!input.trim() || isLoading || !selectedSubject}
               >
                 <Send className="h-5 w-5" />
               </Button>
