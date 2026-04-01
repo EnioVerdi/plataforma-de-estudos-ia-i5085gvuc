@@ -1,13 +1,25 @@
-import { useState, useMemo, useEffect } from 'react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { Send, Trash2, BotMessageSquare, Lightbulb } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { supabase } from '@/lib/supabase/client'
+import useAppStore from '@/stores/useAppStore'
+import UserAssessment from '../components/UserAssessment'
+import { toast } from 'sonner'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import {
   Dialog,
   DialogContent,
@@ -16,517 +28,552 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { BrainCircuit, Plus, Play, Edit, Trash2 } from 'lucide-react'
-import useAppStore, { FlashcardWithReview } from '@/stores/useAppStore'
-import { useAuth } from '@/hooks/use-auth'
-import { Link } from 'react-router-dom'
-import { toast } from 'sonner'
-import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase/client'
 
-const DIFFICULTY_COLORS = {
-  1: { label: 'Muito Fácil', color: '#10b981', bg: '#d1fae5' },
-  2: { label: 'Fácil', color: '#3b82f6', bg: '#dbeafe' },
-  3: { label: 'Médio', color: '#f59e0b', bg: '#fef3c7' },
-  4: { label: 'Difícil', color: '#ef4444', bg: '#fee2e2' },
-  5: { label: 'Muito Difícil', color: '#9333ea', bg: '#faf5ff' },
+interface Message {
+  id: string
+  role: 'user' | 'ai'
+  content: string
+  timestamp: number
 }
 
-const formatNextReviewDate = (nextReviewAt: string): string => {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const reviewDate = new Date(nextReviewAt)
-  reviewDate.setHours(0, 0, 0, 0)
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+const MAX_MESSAGES = 50
+const MESSAGE_RETENTION_DAYS = 14
 
-  const diffTime = reviewDate.getTime() - today.getTime()
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-
-  if (diffDays === 0) return 'Hoje'
-  if (diffDays === 1) return 'Amanhã'
-  if (diffDays > 1) return `Em ${diffDays} dias`
-  return `Atrasado em ${Math.abs(diffDays)} dias`
-}
-
-export default function Flashcards() {
+export default function FlashcardsChat(): React.JSX.Element {
   const { user } = useAuth()
-  const {
-    subjects,
-    flashcards,
-    addFlashcard,
-    deleteFlashcard,
-    updateFlashcardDifficulty,
-    getFlashcardsForToday,
-    loadFlashcardsFromSupabase,
-  } = useAppStore()
+  const { subjects, addFlashcard, userAssessment, getPromptTemplate, loadFlashcardsFromSupabase } = useAppStore()
+  const [showAssessment, setShowAssessment] = useState(!userAssessment)
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: 'initial-ai',
+      role: 'ai',
+      content:
+        'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+      timestamp: Date.now(),
+    },
+  ])
+  const [input, setInput] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedSubject, setSelectedSubject] = useState('')
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([])
+  const [showTemplate, setShowTemplate] = useState(false)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const [open, setOpen] = useState(false)
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false)
-  const [currentReviewCard, setCurrentReviewCard] = useState<FlashcardWithReview | null>(null)
-  const [showAnswer, setShowAnswer] = useState(false)
-  const [reviewSessionCards, setReviewSessionCards] = useState<FlashcardWithReview[]>([])
-  const [reviewIndex, setReviewIndex] = useState(0)
-  const [search, setSearch] = useState('')
-  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all')
-  const [isLoadedFromSupabase, setIsLoadedFromSupabase] = useState(false)
-
-  const [newCard, setNewCard] = useState({
-    question: '',
-    answer: '',
-    subjectId: '',
-    difficulty: 3 as 1 | 2 | 3 | 4 | 5,
-  })
-
-  // Carregar flashcards do Supabase UMA VEZ quando o usuário logar
+  // Carregar flashcards do Supabase quando o usuário logar
   useEffect(() => {
-    if (user?.id && !isLoadedFromSupabase) {
-      console.log('DEBUG - Flashcards.tsx: Carregando flashcards do Supabase para usuário:', user.id)
+    if (user?.id) {
+      console.log('DEBUG - FlashcardsChat: Carregando flashcards do Supabase para usuário:', user.id)
       loadFlashcardsFromSupabase(user.id)
-      setIsLoadedFromSupabase(true)
     }
-  }, [user?.id])
+  }, [user?.id, loadFlashcardsFromSupabase])
 
-  const flashcardsDueToday = useMemo(() => getFlashcardsForToday(), [flashcards])
+  useEffect(() => {
+    const cleanOldMessages = () => {
+      const cutoffDate = Date.now() - MESSAGE_RETENTION_DAYS * 24 * 60 * 60 * 1000
+      setMessages((prev) => prev.filter((msg) => msg.timestamp > cutoffDate))
+    }
+    cleanOldMessages()
+  }, [])
 
-  const filteredFlashcards = useMemo(() => {
-    let filtered = flashcards
-    if (selectedSubjectFilter !== 'all') {
-      filtered = filtered.filter((card) => card.subjectId === selectedSubjectFilter)
-    }
-    if (search) {
-      filtered = filtered.filter(
-        (c) =>
-          c.question.toLowerCase().includes(search.toLowerCase()) ||
-          c.answer.toLowerCase().includes(search.toLowerCase()),
-      )
-    }
-    return filtered
-  }, [flashcards, selectedSubjectFilter, search])
+  useEffect(() => {
+    const start = Math.max(0, messages.length - MAX_MESSAGES)
+    setDisplayMessages(messages.slice(start))
+  }, [messages])
 
-  const handleAdd = () => {
-    if (!newCard.question || !newCard.answer || !newCard.subjectId) {
-      toast.error('Preencha todos os campos.')
-      return
+  useEffect(() => {
+    const loadHistory = async () => {
+      if (!user) return
+      const { data } = await supabase
+        .from('flashcard_chat_sessions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: true })
+        .limit(100)
+
+      if (data && data.length > 0) {
+        const history = data.flatMap((s: any) => [
+          {
+            id: s.id + '-user',
+            role: 'user' as const,
+            content: s.query,
+            timestamp: new Date(s.timestamp).getTime(),
+          },
+          {
+            id: s.id + '-ai',
+            role: 'ai' as const,
+            content: s.response,
+            timestamp: new Date(s.timestamp).getTime(),
+          },
+        ])
+        setMessages((prev) => [...prev, ...history])
+      }
     }
-    addFlashcard({
-      question: newCard.question,
-      answer: newCard.answer,
-      subjectId: newCard.subjectId,
-      difficulty: newCard.difficulty,
-    })
-    setNewCard({ question: '', answer: '', subjectId: '', difficulty: 3 })
-    setOpen(false)
-    toast.success('Flashcard criado com sucesso!')
+    loadHistory()
+  }, [user])
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [displayMessages])
+
+  const parseFlashcardsFromAI = (aiResponse: string) => {
+    const flashcards: Array<{ question: string; answer: string }> = []
+    const lines = aiResponse
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+
+    console.log('Linhas da resposta:', lines)
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      if (line.includes('|')) {
+        const match = line.match(
+          /^(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)\s*\|\s*(?:P|Pergunta|R|Resposta|Q|A)[\s:]*(.+?)$/,
+        )
+        if (match) {
+          const q = match[1].trim()
+          const a = match[2].trim()
+          if (q && a) {
+            flashcards.push({ question: q, answer: a })
+            console.log('Flashcard extraído (padrão pipe):', { q, a })
+            continue
+          }
+        }
+      }
+
+      if (line.match(/^(P:|Pergunta:|Q:|Frente:)/i)) {
+        const question = line.replace(/^(P:|Pergunta:|Q:|Frente:)\s*/i, '').trim()
+
+        if (question && i + 1 < lines.length) {
+          const nextLine = lines[i + 1]
+          if (nextLine.match(/^(R:|Resposta:|A:|Verso:)/i)) {
+            const answer = nextLine.replace(/^(R:|Resposta:|A:|Verso:)\s*/i, '').trim()
+
+            if (answer) {
+              flashcards.push({ question, answer })
+              console.log('Flashcard extraído (padrão P/R):', { question, answer })
+              i += 1
+              continue
+            }
+          }
+        }
+      }
+
+      const numMatch = line.match(/^(\d+)\.\s*(.+?)$/)
+      if (numMatch && i + 1 < lines.length) {
+        const question = numMatch[2].trim()
+        const nextLine = lines[i + 1]
+
+        if (!nextLine.match(/^\d+\./) && !nextLine.match(/^(P:|R:|Pergunta:|Resposta:)/i)) {
+          const answer = nextLine.trim()
+
+          if (question && answer) {
+            flashcards.push({ question, answer })
+            console.log('Flashcard extraído (padrão numerado):', { question, answer })
+            i += 1
+            continue
+          }
+        }
+      }
+    }
+
+    console.log('Total de flashcards extraídos:', flashcards.length)
+    console.log('Flashcards parseados:', flashcards)
+    return flashcards
   }
 
-  const deleteFlashcardFromSupabase = async (cardId: string) => {
-    if (!user) {
-      toast.error('Usuário não autenticado.')
+  const saveFlashcardsToSupabase = async (
+    flashcards: Array<{ question: string; answer: string }>,
+    subjectId: string,
+  ) => {
+    if (!user || flashcards.length === 0) {
+      console.log('DEBUG - saveFlashcardsToSupabase: Usuário não autenticado ou sem flashcards')
       return
     }
 
     try {
-      // 1️⃣ Deleta do Zustand (estado local)
-      deleteFlashcard(cardId)
+      const flashcardsToInsert = flashcards.map((card) => ({
+        user_id: user.id,
+        subject_id: subjectId,
+        question: card.question,
+        answer: card.answer,
+        difficulty: 3,
+        next_review_at: new Date().toISOString().split('T')[0],
+        last_review_at: null,
+        review_count: 0,
+        created_at: new Date().toISOString(),
+        ease_factor: 2.5,
+        interval: 0,
+        repetitions: 0,
+      }))
 
-      // 2️⃣ Deleta do Supabase
-      const { error } = await supabase
-        .from('flashcards')
-        .delete()
-        .eq('id', cardId)
-        .eq('user_id', user.id)
+      const { error } = await supabase.from('flashcards').insert(flashcardsToInsert)
 
       if (error) {
-        console.error('DEBUG - deleteFlashcardFromSupabase: Erro ao deletar:', error)
+        console.error('DEBUG - saveFlashcardsToSupabase: Erro ao salvar:', error)
         throw error
       }
 
-      console.log('DEBUG - deleteFlashcardFromSupabase: Flashcard deletado com sucesso')
-      toast.success('Flashcard excluído com sucesso!')
+      console.log(`DEBUG - saveFlashcardsToSupabase: ${flashcards.length} flashcards salvos com sucesso`)
+
+      // Recarregar flashcards do Supabase para atualizar o estado
+      await loadFlashcardsFromSupabase(user.id)
     } catch (error) {
-      console.error('DEBUG - deleteFlashcardFromSupabase: Erro:', error)
-      toast.error('Erro ao excluir flashcard.')
+      console.error('DEBUG - saveFlashcardsToSupabase: Erro:', error)
+      throw error
     }
   }
 
-  const startReviewSession = () => {
-    const cardsToReview = getFlashcardsForToday()
-    if (cardsToReview.length === 0) {
-      toast.info('Nenhum flashcard para revisar agora!')
+  const handleAiResponse = async (userText: string) => {
+    setIsLoading(true)
+    console.log('DEBUG - FlashcardsChat: Iniciando handleAiResponse')
+    console.log('DEBUG - FlashcardsChat: selectedSubject =', selectedSubject)
+
+    // ✅ VALIDAÇÃO: Verifica se a matéria foi selecionada
+    if (!selectedSubject || selectedSubject.trim() === '') {
+      console.log('DEBUG - FlashcardsChat: ERRO - Matéria não selecionada!')
+      toast.error('Selecione a matéria antes de criar flashcards.')
+      setIsLoading(false)
       return
     }
-    setReviewSessionCards(cardsToReview)
-    setReviewIndex(0)
-    setShowAnswer(false)
-    setCurrentReviewCard(cardsToReview[0])
-    setIsReviewModalOpen(true)
+
+    console.log('DEBUG - FlashcardsChat: Matéria selecionada com sucesso:', selectedSubject)
+
+    try {
+      const template = getPromptTemplate(selectedSubject)
+      const templateInstructions = template
+        ? `\n\nSIGA ESTE PADRÃO para ${template.subjectName}:\n${template.template}`
+        : ''
+
+      const systemPrompt = `Você é um professor especialista em flashcards para estudos. Aja como um tutor natural e paciente: responda EXATAMENTE e SOMENTE o que o usuário pediu, focando em criar flashcards concisos e úteis (máx 2-3 linhas por card). Use formato P: [pergunta curta] | R: [resposta direta] (um por linha).
+
+Mantenha conversa fluida, lembre o contexto anterior e evite repetições. Seja objetivo, priorizando conceitos-chave para provas.
+
+No FINAL da resposta, se relevante, sugira APENAS 1 opção variada (NÃO repita sugestões anteriores):
+- "Quer mais flashcards sobre isso?"
+- "Quer dicas de revisão para Enem/UFPR?"
+- "Quer flashcards em outro formato?"
+
+Varie sugestões com base no histórico. Se não for necessário, não sugira.`
+
+      const response = await fetch(GROQ_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userText },
+          ],
+          temperature: 0.7,
+          max_tokens: 1500,
+        }),
+      })
+
+      if (!response.ok) throw new Error('Erro ao conectar com Groq')
+
+      const data = await response.json()
+      const aiResponseContent = data.choices[0].message.content
+
+      const parsedFlashcards = parseFlashcardsFromAI(aiResponseContent)
+      let chatMessage = ''
+
+      if (parsedFlashcards.length > 0) {
+        const subjectToUse = selectedSubject || subjects[0]?.id
+
+        if (subjectToUse) {
+          // 1️⃣ PRIMEIRO: Adiciona ao estado local (Zustand)
+          parsedFlashcards.forEach((card) => {
+            addFlashcard({
+              question: card.question,
+              answer: card.answer,
+              subjectId: subjectToUse,
+              difficulty: 3,
+            })
+          })
+
+          // 2️⃣ SEGUNDO: Salva no Supabase (NOVO!)
+          await saveFlashcardsToSupabase(parsedFlashcards, subjectToUse)
+
+          const subjectName = subjects.find((s) => s.id === subjectToUse)?.name || 'matéria'
+          chatMessage = `✅ **${parsedFlashcards.length} flashcard${parsedFlashcards.length > 1 ? 's' : ''}** foi${parsedFlashcards.length > 1 ? 'ram' : ''} adicionado${parsedFlashcards.length > 1 ? 's' : ''} à matéria **${subjectName}**! 🎯`
+
+          console.log(`Flashcards criados: ${parsedFlashcards.length} na matéria ${subjectName}`)
+        } else {
+          chatMessage = '⚠️ Selecione uma matéria para adicionar flashcards.'
+        }
+      } else {
+        chatMessage = `Não consegui extrair flashcards do formato esperado.\n\n${aiResponseContent}\n\n💡 Tente com: P: [pergunta] | R: [resposta]`
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        { id: Math.random().toString(), role: 'ai', content: chatMessage, timestamp: Date.now() },
+      ])
+
+      if (user) {
+        await supabase.from('flashcard_chat_sessions').insert({
+          user_id: user.id,
+          query: userText,
+          response: aiResponseContent,
+          timestamp: new Date().toISOString(),
+        })
+      }
+    } catch (error) {
+      console.error('Erro:', error)
+      toast.error('Desculpe, ocorreu um erro ao gerar flashcards.')
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Math.random().toString(),
+          role: 'ai',
+          content: '❌ Erro ao processar sua solicitação. Tente novamente.',
+          timestamp: Date.now(),
+        },
+      ])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleDifficultySelect = (difficulty: 1 | 2 | 3 | 4 | 5) => {
-    if (currentReviewCard) {
-      updateFlashcardDifficulty(currentReviewCard.id, difficulty)
-      toast.success('Flashcard revisado!')
-    }
+  const handleSend = (text: string = input) => {
+    if (!text.trim() || isLoading) return
+    setMessages((prev) => [
+      ...prev,
+      { id: Math.random().toString(), role: 'user', content: text, timestamp: Date.now() },
+    ])
+    setInput('')
+    handleAiResponse(text)
+  }
 
-    if (reviewIndex < reviewSessionCards.length - 1) {
-      setReviewIndex(reviewIndex + 1)
-      setCurrentReviewCard(reviewSessionCards[reviewIndex + 1])
-      setShowAnswer(false)
-    } else {
-      toast.success('Sessão de revisão concluída! Bom trabalho!')
-      setIsReviewModalOpen(false)
-      setReviewSessionCards([])
-      setReviewIndex(0)
-      setCurrentReviewCard(null)
+  const handleDeleteHistory = async () => {
+    if (!user) return
+    try {
+      await supabase.from('flashcard_chat_sessions').delete().eq('user_id', user.id)
+      setMessages([
+        {
+          id: 'initial-ai',
+          role: 'ai',
+          content:
+            'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+          timestamp: Date.now(),
+        },
+      ])
+      toast.success('Histórico de conversas limpo com sucesso!')
+    } catch (error) {
+      console.error('Erro ao limpar histórico:', error)
+      toast.error('Erro ao limpar histórico de conversas.')
     }
   }
 
-  const todayStr = new Date().toISOString().split('T')[0]
+  const currentTemplate = selectedSubject ? getPromptTemplate(selectedSubject) : null
+
+  if (showAssessment && userAssessment === null) {
+    return <UserAssessment onComplete={() => setShowAssessment(false)} />
+  }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 animate-fade-in-up pb-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-darkBlue-700">Meus Flashcards</h1>
-          <p className="text-darkBlue-500 mt-1">
-            {flashcardsDueToday.length} cartões para revisar hoje • Total: {flashcards.length}{' '}
-            cartões
-          </p>
+    <div className="flex h-full w-full bg-beige-50 text-darkBlue-700 overflow-hidden">
+      <div className="w-[30%] min-w-[280px] border-r border-beige-300 bg-white hidden md:flex flex-col">
+        <div className="p-4 border-b border-beige-300 space-y-4">
+          <h3 className="font-semibold text-sm text-darkBlue-700">Matéria</h3>
+          <select
+            value={selectedSubject}
+            onChange={(e) => setSelectedSubject(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-beige-300 bg-beige-50 text-sm text-darkBlue-700 focus:ring-darkBlue-500 focus:border-darkBlue-500"
+          >
+            <option value="">Selecione...</option>
+            {subjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+
+          {selectedSubject && (
+            <Button
+              onClick={() => setShowTemplate(true)}
+              variant="outline"
+              className="w-full border-darkBlue-300 text-darkBlue-700 hover:bg-beige-100 gap-2"
+            >
+              <Lightbulb className="h-4 w-4" />
+              Ver dica de como pedir
+            </Button>
+          )}
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogContent className="sm:max-w-[425px] bg-white border-beige-300 text-darkBlue-700">
-              <DialogHeader>
-                <DialogTitle className="text-darkBlue-700">Criar Flashcard</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label className="text-darkBlue-700">Matéria</Label>
-                  <Select onValueChange={(val) => setNewCard({ ...newCard, subjectId: val })}>
-                    <SelectTrigger className="bg-beige-50 border-beige-300 text-darkBlue-700">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-beige-300 text-darkBlue-700">
-                      {subjects.map((s) => (
-                        <SelectItem key={s.id} value={s.id}>
-                          {s.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-darkBlue-700">Frente (Pergunta)</Label>
-                  <Textarea
-                    value={newCard.question}
-                    onChange={(e) => setNewCard({ ...newCard, question: e.target.value })}
-                    className="bg-beige-50 border-beige-300 text-darkBlue-700"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-darkBlue-700">Verso (Resposta)</Label>
-                  <Textarea
-                    value={newCard.answer}
-                    onChange={(e) => setNewCard({ ...newCard, answer: e.target.value })}
-                    className="bg-beige-50 border-beige-300 text-darkBlue-700"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-darkBlue-700">Nível de Dificuldade</Label>
-                  <Select
-                    value={newCard.difficulty.toString()}
-                    onValueChange={(val) =>
-                      setNewCard({ ...newCard, difficulty: parseInt(val) as 1 | 2 | 3 | 4 | 5 })
-                    }
-                  >
-                    <SelectTrigger className="bg-beige-50 border-beige-300 text-darkBlue-700">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white border-beige-300 text-darkBlue-700">
-                      {Object.entries(DIFFICULTY_COLORS).map(([key, { label }]) => (
-                        <SelectItem key={key} value={key}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+        <ScrollArea className="flex-1" />
+      </div>
+
+      <div className="flex-1 flex flex-col">
+        <div className="p-4 border-b border-beige-300 bg-white flex items-center justify-between shrink-0 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0">
+              <BotMessageSquare className="h-5 w-5 text-darkBlue-500" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-darkBlue-700">Flashcards IA</h2>
+            </div>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-darkBlue-500 hover:bg-beige-100">
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-white text-darkBlue-700 border-beige-300">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Limpar Histórico de Conversas?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas
+                  mensagens com o Flashcards IA.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">
+                  Cancelar
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteHistory}
+                  className="bg-red-500 hover:bg-red-600 text-white"
+                >
+                  Limpar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+
+        <ScrollArea className="flex-1 p-4 md:p-6 bg-beige-50" ref={scrollRef}>
+          <div className="space-y-4 max-w-3xl mx-auto pb-4">
+            {displayMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className={cn(
+                  'flex w-full gap-3',
+                  msg.role === 'user' ? 'justify-end' : 'justify-start',
+                )}
+              >
+                {msg.role === 'ai' && (
+                  <div className="w-8 h-8 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
+                    <BotMessageSquare className="h-4 w-4 text-darkBlue-500" />
+                  </div>
+                )}
+                <div
+                  className={cn(
+                    'max-w-[85%] md:max-w-[75%] rounded-xl px-4 py-3 text-sm md:text-base leading-relaxed shadow-sm',
+                    msg.role === 'user'
+                      ? 'bg-darkBlue-500 text-white rounded-br-sm'
+                      : 'bg-beige-100 text-darkBlue-700 rounded-bl-sm',
+                  )}
+                >
+                  {msg.content.split('\n').map((line, j) => (
+                    <p key={j} className={j > 0 ? 'mt-2' : ''}>
+                      {line}
+                    </p>
+                  ))}
                 </div>
               </div>
-              <DialogFooter>
-                <Button
-                  onClick={handleAdd}
-                  className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
-                  disabled={!newCard.subjectId}
-                >
-                  Salvar Cartão
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+            ))}
 
-          <Button
-            onClick={startReviewSession}
-            disabled={flashcardsDueToday.length === 0}
-            className="gap-2 bg-darkBlue-500 hover:bg-darkBlue-600 text-white flex-1 sm:flex-none"
-          >
-            <BrainCircuit className="h-4 w-4" />
-            Iniciar Revisão
-          </Button>
+            {isLoading && (
+              <div className="flex w-full gap-3 justify-start animate-pulse">
+                <div className="w-8 h-8 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
+                  <BotMessageSquare className="h-4 w-4 text-darkBlue-500" />
+                </div>
+                <div className="bg-beige-100 rounded-xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center shadow-sm">
+                  <div className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"></div>
+                  <div
+                    className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"
+                    style={{ animationDelay: '0.2s' }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"
+                    style={{ animationDelay: '0.4s' }}
+                  ></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
 
-          <Button
-            onClick={() => setOpen(true)}
-            className="gap-2 bg-darkBlue-500 hover:bg-darkBlue-600 text-white flex-1 sm:flex-none"
-          >
-            <Plus className="h-4 w-4" />
-            Novo Cartão
-          </Button>
+        <div className="p-4 border-t border-beige-300 bg-white shrink-0">
+          <div className="max-w-3xl mx-auto">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleSend()
+              }}
+              className="flex gap-2 items-end"
+            >
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder={selectedSubject ? "Descreva o conteúdo..." : "Selecione a matéria antes..."}
+                className="rounded-xl h-12 bg-beige-50 border-beige-300 focus-visible:ring-darkBlue-500 shadow-sm text-darkBlue-700"
+                disabled={!selectedSubject || isLoading}
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="h-12 w-12 rounded-xl shrink-0 shadow-sm bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+                disabled={!input.trim() || isLoading || !selectedSubject}
+              >
+                <Send className="h-5 w-5" />
+              </Button>
+            </form>
+          </div>
         </div>
       </div>
 
-      <Tabs defaultValue="decks" className="space-y-6">
-        <TabsList className="bg-beige-100 border-beige-300 text-darkBlue-700">
-          <TabsTrigger value="decks">Visão por Decks</TabsTrigger>
-          <TabsTrigger value="all">Todos os Cartões</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="decks" className="mt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {subjects.map((subject) => {
-              const sCards = flashcards.filter((c) => c.subjectId === subject.id)
-              const due = sCards.filter((c) => {
-                const reviewDate = c.nextReviewAt.split('T')[0]
-                return reviewDate <= todayStr
-              }).length
-
-              return (
-                <Card
-                  key={subject.id}
-                  className="bg-white border-beige-300 hover:shadow-md transition-shadow group"
-                >
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-xl text-darkBlue-700">{subject.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex justify-between items-end mt-4">
-                      <div className="space-y-1">
-                        <p className="text-sm text-darkBlue-500">
-                          {sCards.length} cartões no total
-                        </p>
-                        {due > 0 ? (
-                          <p className="text-sm font-semibold text-orange-500">
-                            {due} pendentes para hoje
-                          </p>
-                        ) : (
-                          <p className="text-sm text-emerald-500 font-medium">Tudo revisado</p>
-                        )}
-                      </div>
-                      <Button
-                        size="icon"
-                        className="rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-opacity bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
-                        disabled={due === 0}
-                        onClick={startReviewSession}
-                      >
-                        <Play className="h-4 w-4 ml-0.5" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="all" className="mt-0 space-y-4">
-          <div className="flex justify-end">
-            <Input
-              placeholder="Buscar flashcards..."
-              className="max-w-sm bg-white border-beige-300 text-darkBlue-700"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="border border-beige-300 rounded-xl bg-white overflow-hidden">
-            <Table>
-              <TableHeader className="bg-beige-100">
-                <TableRow>
-                  <TableHead className="w-[150px] text-darkBlue-700">Matéria</TableHead>
-                  <TableHead className="text-darkBlue-700">Pergunta</TableHead>
-                  <TableHead className="text-darkBlue-700">Resposta</TableHead>
-                  <TableHead className="w-[100px] text-darkBlue-700">Dificuldade</TableHead>
-                  <TableHead className="w-[80px] text-darkBlue-700">EF</TableHead>
-                  <TableHead className="w-[120px] text-darkBlue-700">Próx. Revisão</TableHead>
-                  <TableHead className="text-right text-darkBlue-700">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredFlashcards.length > 0 ? (
-                  filteredFlashcards.map((card) => {
-                    const s = subjects.find((s) => s.id === card.subjectId)
-                    const diffInfo =
-                      DIFFICULTY_COLORS[card.difficulty as keyof typeof DIFFICULTY_COLORS]
-                    return (
-                      <TableRow key={card.id} className="border-beige-200">
-                        <TableCell>
-                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-beige-100 text-darkBlue-700">
-                            {s?.name || 'Desconhecido'}
-                          </span>
-                        </TableCell>
-                        <TableCell
-                          className="font-medium max-w-[200px] truncate text-darkBlue-700"
-                          title={card.question}
-                        >
-                          {card.question}
-                        </TableCell>
-                        <TableCell
-                          className="text-darkBlue-500 max-w-[250px] truncate"
-                          title={card.answer}
-                        >
-                          {card.answer}
-                        </TableCell>
-                        <TableCell>
-                          <Badge style={{ backgroundColor: diffInfo.bg, color: diffInfo.color }}>
-                            {diffInfo.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-darkBlue-500">
-                          {card.easeFactor ? card.easeFactor.toFixed(2) : 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-darkBlue-500">
-                          {formatNextReviewDate(card.nextReviewAt)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => deleteFlashcardFromSupabase(card.id)}
-                          >
-                            Excluir
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-darkBlue-500">
-                      Nenhum cartão encontrado.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Modal de Revisão */}
-      <Dialog open={isReviewModalOpen} onOpenChange={setIsReviewModalOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white border-beige-300 text-darkBlue-700">
+      <Dialog open={showTemplate} onOpenChange={setShowTemplate}>
+        <DialogContent className="sm:max-w-[600px] bg-white border-beige-300 text-darkBlue-700">
           <DialogHeader>
-            <DialogTitle className="text-darkBlue-700">Revisar Flashcard</DialogTitle>
+            <DialogTitle className="text-darkBlue-700 flex items-center gap-2">
+              <Lightbulb className="h-5 w-5" />
+              Como pedir flashcards eficientes sobre {currentTemplate?.subjectName}
+            </DialogTitle>
             <DialogDescription className="text-darkBlue-500">
-              {currentReviewCard
-                ? `Flashcard ${reviewIndex + 1} de ${reviewSessionCards.length}`
-                : ''}
+              Siga este formato para extrair o máximo da IA:
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            {currentReviewCard ? (
-              <>
-                <Card className="bg-beige-100 border-beige-300">
-                  <CardHeader>
-                    <CardTitle className="text-darkBlue-700 text-lg">
-                      {currentReviewCard.question}
-                    </CardTitle>
-                  </CardHeader>
-                  {showAnswer && (
-                    <CardContent>
-                      <p className="text-darkBlue-700">{currentReviewCard.answer}</p>
-                    </CardContent>
-                  )}
-                </Card>
-                {!showAnswer ? (
-                  <Button
-                    onClick={() => setShowAnswer(true)}
-                    className="w-full bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
-                  >
-                    Mostrar Resposta
-                  </Button>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-darkBlue-700 font-medium">Qual foi a dificuldade?</p>
-                    <div className="grid grid-cols-5 gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(1)}
-                        className="border-purple-500 text-purple-500 hover:bg-purple-50 text-xs"
-                      >
-                        1 - Muito Difícil
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(2)}
-                        className="border-red-500 text-red-500 hover:bg-red-50 text-xs"
-                      >
-                        2 - Difícil
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(3)}
-                        className="border-yellow-500 text-yellow-500 hover:bg-yellow-50 text-xs"
-                      >
-                        3 - Médio
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(4)}
-                        className="border-blue-500 text-blue-500 hover:bg-blue-50 text-xs"
-                      >
-                        4 - Fácil
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(5)}
-                        className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 text-xs"
-                      >
-                        5 - Muito Fácil
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-darkBlue-500 text-center">Carregando flashcard...</p>
-            )}
+
+          <div className="space-y-4 py-4">
+            <div className="bg-beige-50 p-4 rounded-lg border border-beige-300">
+              <p className="text-sm font-semibold text-darkBlue-700 mb-3">📝 Template sugerido:</p>
+              <p className="text-sm text-darkBlue-700 whitespace-pre-wrap font-mono bg-white p-3 rounded border border-beige-200">
+                {currentTemplate?.template}
+              </p>
+            </div>
+
+            <div className="bg-green-50 p-4 rounded-lg border border-green-300">
+              <p className="text-sm font-semibold text-green-700 mb-2">✅ Dica prática:</p>
+              <p className="text-sm text-green-700">{currentTemplate?.example}</p>
+            </div>
+
+            <div className="bg-blue-50 p-4 rounded-lg border border-blue-300">
+              <p className="text-sm font-semibold text-blue-700 mb-2">💡 Por que funciona:</p>
+              <p className="text-sm text-blue-700">
+                Ao seguir este padrão, a IA entende exatamente qual é o contexto e o nível de
+                profundidade que você precisa, gerando flashcards mais relevantes e focados.
+              </p>
+            </div>
           </div>
+
           <DialogFooter>
             <Button
-              variant="outline"
-              onClick={() => setIsReviewModalOpen(false)}
-              className="border-beige-300 text-darkBlue-700 hover:bg-beige-100"
+              onClick={() => setShowTemplate(false)}
+              className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
             >
-              Fechar
+              Entendido! Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

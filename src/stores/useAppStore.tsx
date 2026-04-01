@@ -83,6 +83,7 @@ interface AppState {
   ) => void
   deleteFlashcard: (id: string) => void
   updateFlashcardDifficulty: (cardId: string, difficulty: 1 | 2 | 3 | 4 | 5) => void
+  reviewCard: (cardId: string, quality: 1 | 2 | 3 | 4 | 5) => void
   getFlashcardsForToday: () => FlashcardWithReview[]
   loadFlashcardsFromSupabase: (userId: string) => Promise<void>
   setUserAssessment: (assessment: UserAssessmentData) => void
@@ -329,6 +330,13 @@ const useAppStore = create<AppState>((set, get) => {
             : card,
         ),
       }))
+    },
+
+    reviewCard: (cardId, quality) => {
+      const { updateFlashcardDifficulty, updateDayMetrics, updateStudyStreak } = get()
+      updateFlashcardDifficulty(cardId, quality)
+      updateDayMetrics('flashcardsReviewed', 1)
+      updateStudyStreak()
     },
 
     getFlashcardsForToday: () => {

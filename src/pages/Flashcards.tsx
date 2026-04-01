@@ -43,6 +43,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase/client'
 
 const DIFFICULTY_COLORS = {
   1: { label: 'Muito Fácil', color: '#10b981', bg: '#d1fae5' },
@@ -87,6 +88,7 @@ export default function Flashcards() {
   const [reviewIndex, setReviewIndex] = useState(0)
   const [search, setSearch] = useState('')
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all')
+  const [isLoadedFromSupabase, setIsLoadedFromSupabase] = useState(false)
 
   const [newCard, setNewCard] = useState({
     question: '',
@@ -95,13 +97,14 @@ export default function Flashcards() {
     difficulty: 3 as 1 | 2 | 3 | 4 | 5,
   })
 
-  // Carregar flashcards do Supabase quando o usuário logar
+  // Carregar flashcards do Supabase UMA VEZ quando o usuário logar
   useEffect(() => {
-    if (user?.id) {
+    if (user?.id && !isLoadedFromSupabase) {
       console.log('DEBUG - Flashcards.tsx: Carregando flashcards do Supabase para usuário:', user.id)
       loadFlashcardsFromSupabase(user.id)
+      setIsLoadedFromSupabase(true)
     }
-  }, [user?.id, loadFlashcardsFromSupabase])
+  }, [user?.id])
 
   const flashcardsDueToday = useMemo(() => getFlashcardsForToday(), [flashcards])
 
@@ -136,6 +139,36 @@ export default function Flashcards() {
     toast.success('Flashcard criado com sucesso!')
   }
 
+  const deleteFlashcardFromSupabase = async (cardId: string) => {
+    if (!user) {
+      toast.error('Usuário não autenticado.')
+      return
+    }
+
+    try {
+      // 1️⃣ Deleta do Zustand (estado local)
+      deleteFlashcard(cardId)
+
+      // 2️⃣ Deleta do Supabase
+      const { error } = await supabase
+        .from('flashcards')
+        .delete()
+        .eq('id', cardId)
+        .eq('user_id', user.id)
+
+      if (error) {
+        console.error('DEBUG - deleteFlashcardFromSupabase: Erro ao deletar:', error)
+        throw error
+      }
+
+      console.log('DEBUG - deleteFlashcardFromSupabase: Flashcard deletado com sucesso')
+      toast.success('Flashcard excluído com sucesso!')
+    } catch (error) {
+      console.error('DEBUG - deleteFlashcardFromSupabase: Erro:', error)
+      toast.error('Erro ao excluir flashcard.')
+    }
+  }
+
   const startReviewSession = () => {
     const cardsToReview = getFlashcardsForToday()
     if (cardsToReview.length === 0) {
@@ -166,11 +199,6 @@ export default function Flashcards() {
       setReviewIndex(0)
       setCurrentReviewCard(null)
     }
-  }
-
-  const handleDelete = (cardId: string) => {
-    deleteFlashcard(cardId)
-    toast.success('Flashcard excluído com sucesso!')
   }
 
   const todayStr = new Date().toISOString().split('T')[0]
@@ -391,7 +419,7 @@ export default function Flashcards() {
                             variant="ghost"
                             size="sm"
                             className="text-red-500 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => handleDelete(card.id)}
+                            onClick={() => deleteFlashcardFromSupabase(card.id)}
                           >
                             Excluir
                           </Button>
@@ -451,24 +479,10 @@ export default function Flashcards() {
                     <div className="grid grid-cols-5 gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => handleDifficultySelect(5)}
-                        className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 text-xs"
+                        onClick={() => handleDifficultySelect(1)}
+                        className="border-purple-500 text-purple-500 hover:bg-purple-50 text-xs"
                       >
-                        5 - Muito Fácil
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(4)}
-                        className="border-blue-500 text-blue-500 hover:bg-blue-50 text-xs"
-                      >
-                        4 - Fácil
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => handleDifficultySelect(3)}
-                        className="border-yellow-500 text-yellow-500 hover:bg-yellow-50 text-xs"
-                      >
-                        3 - Médio
+                        1 - Muito Difícil
                       </Button>
                       <Button
                         variant="outline"
@@ -479,10 +493,24 @@ export default function Flashcards() {
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() => handleDifficultySelect(1)}
-                        className="border-purple-500 text-purple-500 hover:bg-purple-50 text-xs"
+                        onClick={() => handleDifficultySelect(3)}
+                        className="border-yellow-500 text-yellow-500 hover:bg-yellow-50 text-xs"
                       >
-                        1 - Muito Difícil
+                        3 - Médio
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleDifficultySelect(4)}
+                        className="border-blue-500 text-blue-500 hover:bg-blue-50 text-xs"
+                      >
+                        4 - Fácil
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleDifficultySelect(5)}
+                        className="border-emerald-500 text-emerald-500 hover:bg-emerald-50 text-xs"
+                      >
+                        5 - Muito Fácil
                       </Button>
                     </div>
                   </div>
