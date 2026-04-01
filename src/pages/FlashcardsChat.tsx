@@ -187,48 +187,61 @@ export default function FlashcardsChat(): React.JSX.Element {
     return flashcards
   }
 
-  const saveFlashcardsToSupabase = async (
-    flashcards: Array<{ question: string; answer: string }>,
-    subjectId: string,
-  ) => {
-    if (!user || flashcards.length === 0) {
-      console.log('DEBUG - saveFlashcardsToSupabase: Usuário não autenticado ou sem flashcards')
-      return
-    }
-
-    try {
-      const flashcardsToInsert = flashcards.map((card) => ({
-        user_id: user.id,
-        subject_id: subjectId,
-        question: card.question,
-        answer: card.answer,
-        difficulty: 3,
-        next_review_at: new Date().toISOString().split('T')[0],
-        last_review_at: null,
-        review_count: 0,
-        created_at: new Date().toISOString(),
-        ease_factor: 2.5,
-        interval: 0,
-        repetitions: 0,
-      }))
-
-      const { error } = await supabase.from('flashcards').insert(flashcardsToInsert)
-
-      if (error) {
-        console.error('DEBUG - saveFlashcardsToSupabase: Erro ao salvar:', error)
-        throw error
-      }
-
-      console.log(`DEBUG - saveFlashcardsToSupabase: ${flashcards.length} flashcards salvos com sucesso`)
-
-      // Recarregar flashcards do Supabase para atualizar o estado
-      await loadFlashcardsFromSupabase(user.id)
-    } catch (error) {
-      console.error('DEBUG - saveFlashcardsToSupabase: Erro:', error)
-      throw error
-    }
+const saveFlashcardsToSupabase = async (
+  flashcards: Array<{ question: string; answer: string }>,
+  subjectId: string,
+) => {
+  if (!user || flashcards.length === 0) {
+    console.log('DEBUG - saveFlashcardsToSupabase: Usuário não autenticado ou sem flashcards')
+    return
   }
 
+  try {
+    // ✅ CORREÇÃO: Formato correto para timestamp
+    const now = new Date()
+    const nextReviewDate = new Date(now)
+    nextReviewDate.setDate(now.getDate() + 1) // Próxima revisão em 1 dia
+
+    const flashcardsToInsert = flashcards.map((card) => ({
+      // ❌ REMOVIDO: id e created_at (auto-gerados)
+      user_id: user.id,  // UUID do usuário logado
+      subject_id: subjectId,  // text - string simples
+      question: card.question,
+      answer: card.answer,
+      difficulty: 3,  // integer
+      next_review_at: nextReviewDate.toISOString(),  // ✅ timestamp with time zone
+      last_review_at: null,
+      review_count: 0,
+      // ✅ REMOVIDO: created_at (auto-gerado)
+      ease_factor: 2.5,  // numeric
+      interval: 0,  // integer
+      repetitions: 0,  // integer
+    }))
+
+    console.log('DEBUG - saveFlashcardsToSupabase: Dados para INSERT:', flashcardsToInsert)
+
+    const { data, error } = await supabase
+      .from('flashcards')
+      .insert(flashcardsToInsert)
+      .select()  // Retorna os dados inseridos
+
+    if (error) {
+      console.error('DEBUG - saveFlashcardsToSupabase: Erro ao salvar:', error)
+      throw error
+    }
+
+    console.log('DEBUG - saveFlashcardsToSupabase: Inseridos com sucesso:', data.length, 'flashcards')
+
+    // Recarregar flashcards do Supabase para atualizar o estado
+    await loadFlashcardsFromSupabase(user.id)
+
+    toast.success(`${data.length} flashcard${data.length > 1 ? 's' : ''} criado${data.length > 1 ? 's' : ''} com sucesso!`)
+  } catch (error) {
+    console.error('DEBUG - saveFlashcardsToSupabase: Erro completo:', error)
+    toast.error('Erro ao salvar flashcards no banco. Verifique o console.')
+    throw error
+  }
+}
   const handleAiResponse = async (userText: string) => {
     setIsLoading(true)
     console.log('DEBUG - FlashcardsChat: Iniciando handleAiResponse')
