@@ -28,12 +28,14 @@ export default function Study() {
   const currentCard = dueCards[currentIndex]
 
   const totalDue = dueCards.length
-  const progress = totalDue === 0 ? 100 : (currentIndex / totalDue) * 100
+  const progress = totalDue === 0 ? 100 : ((currentIndex) / totalDue) * 100
 
-  const handleReview = (quality: number) => {
+  const handleReview = (quality: 1 | 2 | 3 | 4 | 5) => {
     if (!currentCard) return
+    
     reviewCard(currentCard.id, quality)
     setIsFlipped(false)
+    
     setTimeout(() => {
       setCurrentIndex((prev) => prev + 1)
     }, 150)
