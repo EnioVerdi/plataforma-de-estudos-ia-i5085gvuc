@@ -128,7 +128,7 @@ export default function FlashcardsChat(): React.JSX.Element {
       .map((l) => l.trim())
       .filter((l) => l.length > 0)
 
-    console.log('Linhas da resposta:', lines)
+    console.log('DEBUG - parseFlashcardsFromAI: Linhas da resposta:', lines)
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
@@ -142,7 +142,7 @@ export default function FlashcardsChat(): React.JSX.Element {
           const a = match[2].trim()
           if (q && a) {
             flashcards.push({ question: q, answer: a })
-            console.log('Flashcard extraído (padrão pipe):', { q, a })
+            console.log('DEBUG - parseFlashcardsFromAI: Flashcard extraído (padrão pipe):', { q, a })
             continue
           }
         }
@@ -158,7 +158,7 @@ export default function FlashcardsChat(): React.JSX.Element {
 
             if (answer) {
               flashcards.push({ question, answer })
-              console.log('Flashcard extraído (padrão P/R):', { question, answer })
+              console.log('DEBUG - parseFlashcardsFromAI: Flashcard extraído (padrão P/R):', { question, answer })
               i += 1
               continue
             }
@@ -176,7 +176,7 @@ export default function FlashcardsChat(): React.JSX.Element {
 
           if (question && answer) {
             flashcards.push({ question, answer })
-            console.log('Flashcard extraído (padrão numerado):', { question, answer })
+            console.log('DEBUG - parseFlashcardsFromAI: Flashcard extraído (padrão numerado):', { question, answer })
             i += 1
             continue
           }
@@ -184,8 +184,8 @@ export default function FlashcardsChat(): React.JSX.Element {
       }
     }
 
-    console.log('Total de flashcards extraídos:', flashcards.length)
-    console.log('Flashcards parseados:', flashcards)
+    console.log('DEBUG - parseFlashcardsFromAI: Total de flashcards extraídos:', flashcards.length)
+    console.log('DEBUG - parseFlashcardsFromAI: Flashcards parseados:', flashcards)
     return flashcards
   }
 
@@ -212,23 +212,27 @@ export default function FlashcardsChat(): React.JSX.Element {
       const now = new Date()
       const nextReviewDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-      const flashcardsToInsert = flashcards.map((card) => ({
-        question: card.question,
-        answer: card.answer,
-        subject_id: subjectId,
-        user_id: supabaseUserId,
-        difficulty: 3,
-        ease_factor: 2.5,
-        interval: 0,
-        repetitions: 0,
-        next_review_at: nextReviewDate.toISOString(),
-        is_generated_by_ai: true,
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-        review_count: 0,
-      }))
+      const flashcardsToInsert = flashcards.map((card) => {
+        // ✅ CORREÇÃO: Garantindo explicitamente que review_count e repetitions sejam 0 para novos flashcards
+        console.log('DEBUG - saveFlashcardsToSupabase: Garantindo review_count: 0 e repetitions: 0 para:', card.question)
+        return ({
+          question: card.question,
+          answer: card.answer,
+          subject_id: subjectId,
+          user_id: supabaseUserId,
+          difficulty: 3,
+          ease_factor: 2.5,
+          interval: 0,
+          repetitions: 0, // ✅ Garantido como 0 para novos cartões
+          next_review_at: nextReviewDate.toISOString(),
+          is_generated_by_ai: true,
+          created_at: now.toISOString(),
+          updated_at: now.toISOString(),
+          review_count: 0, // ✅ Garantido como 0 para novos cartões
+        })
+      })
 
-      console.log('DEBUG - saveFlashcardsToSupabase: Payload para INSERT (sem ID auto-gerado):', flashcardsToInsert)
+      console.log('DEBUG - saveFlashcardsToSupabase: Payload para INSERT (com review_count=0 e repetitions=0):', flashcardsToInsert)
 
       const { data, error } = await supabase
         .from('flashcards')
@@ -246,7 +250,7 @@ export default function FlashcardsChat(): React.JSX.Element {
         return { success: false, error: error.message }
       }
 
-      console.log('DEBUG - saveFlashcardsToSupabase: SUCESSO! Inseridos:', data.length, 'flashcards')
+      console.log('DEBUG - saveFlashcardsToSupabase: SUCESSO! Inseridos:', data.length, 'flashcards com review_count=0 e repetitions=0')
       console.log('IDs inseridos pelo Supabase:', data.map((d: any) => d.id))
       console.log('User ID salvo:', data[0]?.user_id)
       console.log('Subject ID salvo:', data[0]?.subject_id)
@@ -329,6 +333,18 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
         })
 
         const saveResult = await saveFlashcardsToSupabase(parsedFlashcards, subjectToUse)
+
+        // ✅ CORREÇÃO CRÍTICA: Recarregar flashcards do Supabase APÓS salvar com sucesso (resolve 404 na aba)
+        if (user?.id && saveResult.success) {
+          try {
+            console.log('DEBUG - handleAiResponse: Recarregando flashcards do Supabase após criação via IA...')
+            await loadFlashcardsFromSupabase(user.id)
+            console.log('DEBUG - handleAiResponse: Flashcards recarregados com sucesso. A aba agora deve sincronizar!')
+          } catch (reloadError) {
+            console.error('DEBUG - handleAiResponse: Erro ao recarregar flashcards após save:', reloadError)
+            toast.error('Erro ao sincronizar flashcards. Tente recarregar a página.')
+          }
+        }
 
         if (saveResult.success) {
           const subjectName = subjects.find((s) => s.id === subjectToUse)?.name || 'matéria'
