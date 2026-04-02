@@ -2,6 +2,15 @@ import { create } from 'zustand'
 import { supabase } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 
+// Função auxiliar para gerar UUIDs válidos
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
 export interface FlashcardWithReview {
   id: string
   question: string
@@ -251,7 +260,7 @@ const calculateNextReviewDate = (difficulty: 1 | 2 | 3 | 4 | 5): string => {
   }
 
   now.setDate(now.getDate() + daysToAdd)
-  return now.toISOString().split('T')[0]
+  return now.toISOString()
 }
 
 const useAppStore = create<AppState>((set, get) => {
@@ -292,14 +301,16 @@ const useAppStore = create<AppState>((set, get) => {
     },
 
     addFlashcard: (card) => {
+      console.log('DEBUG - addFlashcard (Zustand): Adicionando flashcard localmente:', card)
       set((state) => ({
         flashcards: [
           ...state.flashcards,
           {
-            id: Date.now().toString(),
+            id: generateUUID(),
             ...card,
             difficulty: card.difficulty || 3,
-            nextReviewAt: new Date().toISOString().split('T')[0],
+            nextReviewAt: new Date().toISOString(),
+            lastReviewAt: new Date().toISOString(),
             reviewCount: 0,
             createdAt: new Date().toISOString(),
             easeFactor: SM2_INITIAL_EASE_FACTOR,
@@ -308,6 +319,7 @@ const useAppStore = create<AppState>((set, get) => {
           } as FlashcardWithReview,
         ],
       }))
+      console.log('DEBUG - addFlashcard: Flashcard adicionado ao estado local')
     },
 
     deleteFlashcard: (id) => {
@@ -372,13 +384,13 @@ const useAppStore = create<AppState>((set, get) => {
         }
 
         const flashcards: FlashcardWithReview[] = (data || []).map((card: any) => ({
-          id: card.id.toString(),
+          id: card.id,
           question: card.question,
           answer: card.answer,
           subjectId: card.subject_id,
           difficulty: card.difficulty || 3,
-          nextReviewAt: card.next_review_at,
-          lastReviewAt: card.last_review_at,
+          nextReviewAt: card.next_review_at ? new Date(card.next_review_at).toISOString() : new Date().toISOString(),
+          lastReviewAt: card.last_review_at ? new Date(card.last_review_at).toISOString() : undefined,
           reviewCount: card.review_count || 0,
           createdAt: card.created_at,
           easeFactor: card.ease_factor || SM2_INITIAL_EASE_FACTOR,

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { v4 as uuidv4 } from 'uuid'
 
 interface Message {
   id: string
@@ -49,8 +50,7 @@ export default function FlashcardsChat(): React.JSX.Element {
     {
       id: 'initial-ai',
       role: 'ai',
-      content:
-        'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+      content: 'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
       timestamp: Date.now(),
     },
   ])
@@ -59,9 +59,9 @@ export default function FlashcardsChat(): React.JSX.Element {
   const [selectedSubject, setSelectedSubject] = useState('')
   const [displayMessages, setDisplayMessages] = useState<Message[]>([])
   const [showTemplate, setShowTemplate] = useState(false)
+  const [hasLoadedHistory, setHasLoadedHistory] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Carregar flashcards do Supabase quando o usuário logar
   useEffect(() => {
     if (user?.id) {
       console.log('DEBUG - FlashcardsChat: Carregando flashcards do Supabase para usuário:', user.id)
@@ -84,7 +84,8 @@ export default function FlashcardsChat(): React.JSX.Element {
 
   useEffect(() => {
     const loadHistory = async () => {
-      if (!user) return
+      if (!user || hasLoadedHistory) return
+
       const { data } = await supabase
         .from('flashcard_chat_sessions')
         .select('*')
@@ -95,13 +96,13 @@ export default function FlashcardsChat(): React.JSX.Element {
       if (data && data.length > 0) {
         const history = data.flatMap((s: any) => [
           {
-            id: s.id + '-user',
+            id: `${s.id}-user-${Date.now()}-${Math.random()}`,
             role: 'user' as const,
             content: s.query,
             timestamp: new Date(s.timestamp).getTime(),
           },
           {
-            id: s.id + '-ai',
+            id: `${s.id}-ai-${Date.now()}-${Math.random()}`,
             role: 'ai' as const,
             content: s.response,
             timestamp: new Date(s.timestamp).getTime(),
@@ -109,9 +110,10 @@ export default function FlashcardsChat(): React.JSX.Element {
         ])
         setMessages((prev) => [...prev, ...history])
       }
+      setHasLoadedHistory(true)
     }
     loadHistory()
-  }, [user])
+  }, [user, hasLoadedHistory])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -193,64 +195,76 @@ export default function FlashcardsChat(): React.JSX.Element {
   ) => {
     if (!user || flashcards.length === 0) {
       console.log('DEBUG - saveFlashcardsToSupabase: Usuário não autenticado ou sem flashcards')
-      return
+      return { success: false }
     }
 
     try {
-      // ✅ CORREÇÃO: Timestamp completo para next_review_at
+      const { data: { user: supabaseUser }, error: authError } = await supabase.auth.getUser()
+      if (authError || !supabaseUser?.id) {
+        console.error('DEBUG - saveFlashcardsToSupabase: Erro ao pegar UUID do Supabase:', authError)
+        toast.error('Erro de autenticação. Faça login novamente.')
+        return { success: false, error: 'Usuário não autenticado no Supabase' }
+      }
+
+      const supabaseUserId = supabaseUser.id
+      console.log('DEBUG - saveFlashcardsToSupabase: UUID Supabase correto:', supabaseUserId, 'Type:', typeof supabaseUserId)
+
       const now = new Date()
-      const nextReviewDate = new Date(now)
-      nextReviewDate.setDate(now.getDate() + 1) // Próxima revisão em 1 dia
+      const nextReviewDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
       const flashcardsToInsert = flashcards.map((card) => ({
-        user_id: user.id,  // UUID do usuário
-        subject_id: subjectId,  // text - string simples
         question: card.question,
         answer: card.answer,
-        difficulty: 3,  // integer
-        next_review_at: nextReviewDate.toISOString(),  // ✅ timestamp with time zone
-        last_review_at: null,
+        subject_id: subjectId,
+        user_id: supabaseUserId,
+        difficulty: 3,
+        ease_factor: 2.5,
+        interval: 0,
+        repetitions: 0,
+        next_review_at: nextReviewDate.toISOString(),
+        is_generated_by_ai: true,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
         review_count: 0,
-        // ✅ REMOVIDO: id e created_at (auto-gerados)
-        ease_factor: 2.5,  // numeric
-        interval: 0,  // integer
-        repetitions: 0,  // integer
       }))
 
-      console.log('DEBUG - saveFlashcardsToSupabase: Dados para INSERT:', flashcardsToInsert)
+      console.log('DEBUG - saveFlashcardsToSupabase: Payload para INSERT (sem ID auto-gerado):', flashcardsToInsert)
 
-      // ✅ INSERT com select para retornar os dados inseridos
       const { data, error } = await supabase
         .from('flashcards')
         .insert(flashcardsToInsert)
-        .select('*')
+        .select('id, question, answer, next_review_at, user_id, subject_id')
 
       if (error) {
-        console.error('DEBUG - saveFlashcardsToSupabase: Erro ao salvar:', error)
+        console.error('DEBUG - saveFlashcardsToSupabase: Erro detalhado:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        })
         toast.error(`Erro ao salvar: ${error.message}`)
-        throw error
+        return { success: false, error: error.message }
       }
 
-      console.log('DEBUG - saveFlashcardsToSupabase: Inseridos com sucesso:', data.length, 'flashcards')
-      console.log('Dados inseridos:', data)
+      console.log('DEBUG - saveFlashcardsToSupabase: SUCESSO! Inseridos:', data.length, 'flashcards')
+      console.log('IDs inseridos pelo Supabase:', data.map((d: any) => d.id))
+      console.log('User ID salvo:', data[0]?.user_id)
+      console.log('Subject ID salvo:', data[0]?.subject_id)
 
-      // Recarregar flashcards do Supabase para atualizar o estado
-      await loadFlashcardsFromSupabase(user.id)
-
-      toast.success(`${data.length} flashcard${data.length > 1 ? 's' : ''} criado${data.length > 1 ? 's' : ''} com sucesso!`)
-    } catch (error) {
-      console.error('DEBUG - saveFlashcardsToSupabase: Erro completo:', error)
-      toast.error('Erro ao salvar flashcards. Verifique o console para detalhes.')
-      throw error
+      toast.success(`${data.length} flashcard${data.length > 1 ? 's' : ''} salvo${data.length > 1 ? 's' : ''} com sucesso no banco!`)
+      return { success: true, data }
+    } catch (error: any) {
+      console.error('DEBUG - saveFlashcardsToSupabase: Exceção capturada:', error)
+      toast.error('Falha ao salvar. Verifique se a matéria está selecionada e tente novamente.')
+      return { success: false, error: error.message || 'Erro desconhecido' }
     }
   }
 
   const handleAiResponse = async (userText: string) => {
     setIsLoading(true)
-    console.log('DEBUG - FlashcardsChat: Iniciando handleAiResponse')
+    console.log('DEBUG - FlashcardsChat: Iniciando handleAiResponse com:', userText)
     console.log('DEBUG - FlashcardsChat: selectedSubject =', selectedSubject)
 
-    // ✅ VALIDAÇÃO: Verifica se a matéria foi selecionada
     if (!selectedSubject || selectedSubject.trim() === '') {
       console.log('DEBUG - FlashcardsChat: ERRO - Matéria não selecionada!')
       toast.error('Selecione a matéria antes de criar flashcards.')
@@ -303,29 +317,28 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
       let chatMessage = ''
 
       if (parsedFlashcards.length > 0) {
-        const subjectToUse = selectedSubject || subjects[0]?.id
+        const subjectToUse = selectedSubject
 
-        if (subjectToUse) {
-          // 1️⃣ Adiciona ao estado local (Zustand)
-          parsedFlashcards.forEach((card) => {
-            addFlashcard({
-              question: card.question,
-              answer: card.answer,
-              subjectId: subjectToUse,
-              difficulty: 3,
-            })
+        parsedFlashcards.forEach((card) => {
+          addFlashcard({
+            question: card.question,
+            answer: card.answer,
+            subjectId: subjectToUse,
+            difficulty: 3,
           })
+        })
 
-          // 2️⃣ Salva no Supabase (CORRIGIDO!)
-          await saveFlashcardsToSupabase(parsedFlashcards, subjectToUse)
+        const saveResult = await saveFlashcardsToSupabase(parsedFlashcards, subjectToUse)
 
+        if (saveResult.success) {
           const subjectName = subjects.find((s) => s.id === subjectToUse)?.name || 'matéria'
-          chatMessage = `✅ **${parsedFlashcards.length} flashcard${parsedFlashcards.length > 1 ? 's' : ''}** foi${parsedFlashcards.length > 1 ? 'ram' : ''} adicionado${parsedFlashcards.length > 1 ? 's' : ''} à matéria **${subjectName}**! 🎯`
-
-          console.log(`Flashcards criados: ${parsedFlashcards.length} na matéria ${subjectName}`)
+          chatMessage = `✅ **${parsedFlashcards.length} flashcard${parsedFlashcards.length > 1 ? 's' : ''}** criado${parsedFlashcards.length > 1 ? 's' : ''} com sucesso na matéria **${subjectName}**! 🎯`
         } else {
-          chatMessage = '⚠️ Selecione uma matéria para adicionar flashcards.'
+          const subjectName = subjects.find((s) => s.id === subjectToUse)?.name || 'matéria'
+          chatMessage = `✅ **${parsedFlashcards.length} flashcard${parsedFlashcards.length > 1 ? 's' : ''}** criado${parsedFlashcards.length > 1 ? 's' : ''} na matéria **${subjectName}**! (Localmente - banco falhou, mas está salvo no app) 🎯`
         }
+
+        console.log(`Flashcards processados: ${parsedFlashcards.length} na matéria ${subjectToUse}`)
       } else {
         chatMessage = `Não consegui extrair flashcards do formato esperado.\n\n${aiResponseContent}\n\n💡 Tente com: P: [pergunta] | R: [resposta]`
       }
@@ -344,7 +357,7 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
         })
       }
     } catch (error) {
-      console.error('Erro:', error)
+      console.error('Erro geral no handleAiResponse:', error)
       toast.error('Desculpe, ocorreu um erro ao gerar flashcards.')
       setMessages((prev) => [
         ...prev,
@@ -378,11 +391,11 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
         {
           id: 'initial-ai',
           role: 'ai',
-          content:
-            'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
+          content: 'Olá! Sou seu assistente para criar flashcards. Explique o conteúdo que deseja estudar!',
           timestamp: Date.now(),
         },
       ])
+      setHasLoadedHistory(false)
       toast.success('Histórico de conversas limpo com sucesso!')
     } catch (error) {
       console.error('Erro ao limpar histórico:', error)
