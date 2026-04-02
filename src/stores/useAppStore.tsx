@@ -309,7 +309,7 @@ const useAppStore = create<AppState>((set, get) => {
             id: generateUUID(),
             ...card,
             difficulty: card.difficulty || 3,
-            nextReviewAt: new Date().toISOString(),
+            nextReviewAt: new Date().toISOString(), // ✅ Para novos, setar para hoje
             lastReviewAt: new Date().toISOString(),
             reviewCount: 0,
             createdAt: new Date().toISOString(),
@@ -351,12 +351,25 @@ const useAppStore = create<AppState>((set, get) => {
       updateStudyStreak()
     },
 
+    // ✅ CORREÇÃO CRÍTICA: Incluir novos cartões (reviewCount === 0) na revisão de hoje
     getFlashcardsForToday: () => {
       const today = new Date().toISOString().split('T')[0]
+      console.log('DEBUG - getFlashcardsForToday: Filtrando cartões para hoje. Total flashcards:', get().flashcards.length)
+      
       const allDueCards = get().flashcards.filter((card) => {
+        // ✅ NOVO: Incluir cartões novos (reviewCount === 0) mesmo se nextReviewAt for amanhã
+        if (card.reviewCount === 0) {
+          console.log('DEBUG - getFlashcardsForToday: Incluindo cartão novo ID:', card.id, 'reviewCount:', card.reviewCount)
+          return true // Novos cartões são "due" na primeira vez
+        }
+
         const reviewDate = card.nextReviewAt.split('T')[0]
-        return reviewDate <= today
+        const isDue = reviewDate <= today
+        console.log('DEBUG - getFlashcardsForToday: Cartão ID:', card.id, 'nextReviewAt:', reviewDate, 'isDue:', isDue)
+        return isDue
       })
+
+      console.log('DEBUG - getFlashcardsForToday: Cartões filtrados para hoje:', allDueCards.length, 'IDs:', allDueCards.map(c => c.id))
 
       allDueCards.sort((a, b) => {
         const dateA = new Date(a.nextReviewAt).getTime()
@@ -364,7 +377,9 @@ const useAppStore = create<AppState>((set, get) => {
         return dateA - dateB
       })
 
-      return allDueCards.slice(0, DAILY_REVIEW_LIMIT)
+      const limitedCards = allDueCards.slice(0, DAILY_REVIEW_LIMIT)
+      console.log('DEBUG - getFlashcardsForToday: Retornando', limitedCards.length, 'cartões limitados')
+      return limitedCards
     },
 
     loadFlashcardsFromSupabase: async (userId: string) => {

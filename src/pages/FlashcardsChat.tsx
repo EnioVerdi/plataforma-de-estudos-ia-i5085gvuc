@@ -210,29 +210,26 @@ export default function FlashcardsChat(): React.JSX.Element {
       console.log('DEBUG - saveFlashcardsToSupabase: UUID Supabase correto:', supabaseUserId, 'Type:', typeof supabaseUserId)
 
       const now = new Date()
-      const nextReviewDate = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+      // ✅ CORREÇÃO: Para novos cartões de IA, setar nextReviewAt para HOJE (permitir revisão imediata)
+      const nextReviewDate = new Date(now.toISOString()) // Hoje, hora atual
 
-      const flashcardsToInsert = flashcards.map((card) => {
-        // ✅ CORREÇÃO: Garantindo explicitamente que review_count e repetitions sejam 0 para novos flashcards
-        console.log('DEBUG - saveFlashcardsToSupabase: Garantindo review_count: 0 e repetitions: 0 para:', card.question)
-        return ({
-          question: card.question,
-          answer: card.answer,
-          subject_id: subjectId,
-          user_id: supabaseUserId,
-          difficulty: 3,
-          ease_factor: 2.5,
-          interval: 0,
-          repetitions: 0, // ✅ Garantido como 0 para novos cartões
-          next_review_at: nextReviewDate.toISOString(),
-          is_generated_by_ai: true,
-          created_at: now.toISOString(),
-          updated_at: now.toISOString(),
-          review_count: 0, // ✅ Garantido como 0 para novos cartões
-        })
-      })
+      const flashcardsToInsert = flashcards.map((card) => ({
+        question: card.question,
+        answer: card.answer,
+        subject_id: subjectId,
+        user_id: supabaseUserId,
+        difficulty: 3,
+        ease_factor: 2.5,
+        interval: 0,
+        repetitions: 0,
+        next_review_at: nextReviewDate.toISOString(),
+        is_generated_by_ai: true,
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+        review_count: 0,
+      }))
 
-      console.log('DEBUG - saveFlashcardsToSupabase: Payload para INSERT (com review_count=0 e repetitions=0):', flashcardsToInsert)
+      console.log('DEBUG - saveFlashcardsToSupabase: Payload para INSERT (nextReviewAt=hoje para novos):', flashcardsToInsert)
 
       const { data, error } = await supabase
         .from('flashcards')
@@ -250,7 +247,7 @@ export default function FlashcardsChat(): React.JSX.Element {
         return { success: false, error: error.message }
       }
 
-      console.log('DEBUG - saveFlashcardsToSupabase: SUCESSO! Inseridos:', data.length, 'flashcards com review_count=0 e repetitions=0')
+      console.log('DEBUG - saveFlashcardsToSupabase: SUCESSO! Inseridos:', data.length, 'flashcards')
       console.log('IDs inseridos pelo Supabase:', data.map((d: any) => d.id))
       console.log('User ID salvo:', data[0]?.user_id)
       console.log('Subject ID salvo:', data[0]?.subject_id)
@@ -333,8 +330,9 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
         })
 
         const saveResult = await saveFlashcardsToSupabase(parsedFlashcards, subjectToUse)
+        console.log('DEBUG - handleAiResponse: Resultado do saveFlashcardsToSupabase:', saveResult)
 
-        // ✅ CORREÇÃO CRÍTICA: Recarregar flashcards do Supabase APÓS salvar com sucesso (resolve 404 na aba)
+        // ✅ CORREÇÃO: Recarregar flashcards do Supabase APÓS salvar com sucesso (sincroniza a aba)
         if (user?.id && saveResult.success) {
           try {
             console.log('DEBUG - handleAiResponse: Recarregando flashcards do Supabase após criação via IA...')
