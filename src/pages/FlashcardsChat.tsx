@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Trash2, BotMessageSquare, Lightbulb } from 'lucide-react'
+import { Send, Trash2, BotMessageSquare, Lightbulb, BookOpen, Sparkles, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase/client'
@@ -424,97 +424,203 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
   }
 
   return (
-    <div className="flex h-full w-full bg-beige-50 text-darkBlue-700 overflow-hidden">
-      <div className="w-[30%] min-w-[280px] border-r border-beige-300 bg-white hidden md:flex flex-col">
-        <div className="p-4 border-b border-beige-300 space-y-4">
-          <h3 className="font-semibold text-sm text-darkBlue-700">Matéria</h3>
-          <select
-            value={selectedSubject}
-            onChange={(e) => setSelectedSubject(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-beige-300 bg-beige-50 text-sm text-darkBlue-700 focus:ring-darkBlue-500 focus:border-darkBlue-500"
-          >
-            <option value="">Selecione...</option>
-            {subjects.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+    <div className="flex h-full w-full bg-gradient-light text-darkBlue-700 overflow-hidden">
+      {/* ✅ SIDEBAR - Modernizada com Gradientes */}
+      <div className="w-[30%] min-w-[280px] border-r border-beige-200 bg-white hidden md:flex flex-col shadow-sm">
+        {/* ✅ HEADER SIDEBAR */}
+        <div className="p-5 border-b border-beige-100 bg-gradient-to-b from-white to-beige-50 space-y-4">
+          <div>
+            <h3 className="font-bold text-sm text-darkBlue-700 mb-3 flex items-center gap-2">
+              <BookOpen className="h-4 w-4 text-darkBlue-600" />
+              Selecione a Matéria
+            </h3>
+          </div>
 
+          {/* ✅ SELECT DROPDOWN - Estilizado */}
+          <div className="relative">
+            <select
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border-2 border-beige-200 bg-white text-sm font-semibold text-darkBlue-700 focus:border-darkBlue-500 focus:outline-none focus:ring-2 focus:ring-darkBlue-200 transition-all duration-300 appearance-none cursor-pointer hover:border-beige-300"
+            >
+              <option value="">📚 Selecione...</option>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <ArrowRight className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-darkBlue-400 pointer-events-none" />
+          </div>
+
+          {/* ✅ TEMPLATE BUTTON - Com animação */}
           {selectedSubject && (
             <Button
               onClick={() => setShowTemplate(true)}
-              variant="outline"
-              className="w-full border-darkBlue-300 text-darkBlue-700 hover:bg-beige-100 gap-2"
+              className="w-full bg-gradient-to-r from-darkBlue-500 to-darkBlue-600 hover:shadow-lg text-white font-semibold gap-2 h-11 rounded-xl transition-all duration-300 hover:scale-105 active:scale-95"
             >
-              <Lightbulb className="h-4 w-4" />
-              Ver dica de como pedir
+              <Lightbulb className="h-5 w-5" />
+              Dica de Como Pedir
             </Button>
           )}
+
+          {/* ✅ EMPTY STATE - Quando nenhuma matéria selecionada */}
+          {!selectedSubject && (
+            <div className="mt-6 p-4 bg-gradient-soft rounded-xl border border-beige-200 text-center">
+              <Sparkles className="h-8 w-8 text-darkBlue-400 mx-auto mb-2 opacity-60" />
+              <p className="text-xs text-darkBlue-600 font-medium">
+                Escolha uma matéria para começar
+              </p>
+            </div>
+          )}
         </div>
-        <ScrollArea className="flex-1" />
+
+        {/* ✅ SCROLLAREA - Para futuras expansões */}
+        <ScrollArea className="flex-1 p-4" />
+
+        {/* ✅ FOOTER SIDEBAR - Dicas */}
+        <div className="p-4 border-t border-beige-100 bg-beige-50">
+          <div className="text-xs text-darkBlue-600 space-y-2">
+            <p className="font-semibold flex items-center gap-2">
+              <Sparkles className="h-3 w-3" />
+              Dica Rápida
+            </p>
+            <p className="text-darkBlue-500">
+              Descreva bem o conteúdo e a IA criará flashcards automaticamente! ✨
+            </p>
+          </div>
+        </div>
       </div>
 
+      {/* ✅ MAIN CHAT AREA */}
       <div className="flex-1 flex flex-col">
-        <div className="p-4 border-b border-beige-300 bg-white flex items-center justify-between shrink-0 shadow-sm">
+        {/* ✅ HEADER DO CHAT */}
+        <div className="p-4 border-b border-beige-200 bg-white/80 backdrop-blur-md flex items-center justify-between shrink-0 shadow-sm">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0">
-              <BotMessageSquare className="h-5 w-5 text-darkBlue-500" />
+            <div className="h-11 w-11 rounded-xl bg-gradient-primary flex items-center justify-center shrink-0 shadow-md">
+              <BotMessageSquare className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h2 className="font-semibold text-darkBlue-700">Flashcards IA</h2>
+              <h2 className="font-bold text-lg bg-gradient-to-r from-darkBlue-700 to-darkBlue-600 bg-clip-text text-transparent">
+                Flashcards IA
+              </h2>
+              <p className="text-xs text-darkBlue-400 font-semibold">Gerador inteligente</p>
             </div>
           </div>
+
+          {/* ✅ DELETE BUTTON */}
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-darkBlue-500 hover:bg-beige-100">
-                <Trash2 className="h-5 w-5" />
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-10 w-10 rounded-lg text-darkBlue-500 hover:bg-red-50 hover:text-red-600 transition-all duration-300 group"
+              >
+                <Trash2 className="h-5 w-5 group-hover:scale-110 transition-transform duration-300" />
               </Button>
             </AlertDialogTrigger>
-            <AlertDialogContent className="bg-white text-darkBlue-700 border-beige-300">
+            <AlertDialogContent className="bg-white text-darkBlue-700 border-beige-300 rounded-2xl">
               <AlertDialogHeader>
-                <AlertDialogTitle>Limpar Histórico de Conversas?</AlertDialogTitle>
-                <AlertDialogDescription>
+                <AlertDialogTitle className="text-lg font-bold">Limpar Histórico de Conversas?</AlertDialogTitle>
+                <AlertDialogDescription className="text-darkBlue-600">
                   Esta ação não pode ser desfeita. Isso excluirá permanentemente todas as suas
                   mensagens com o Flashcards IA.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700">
+                <AlertDialogCancel className="hover:bg-beige-100 border-beige-300 text-darkBlue-700 rounded-lg">
                   Cancelar
                 </AlertDialogCancel>
                 <AlertDialogAction
                   onClick={handleDeleteHistory}
-                  className="bg-red-500 hover:bg-red-600 text-white"
+                  className="bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold"
                 >
-                  Limpar
+                  Limpar Histórico
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
 
-        <ScrollArea className="flex-1 p-4 md:p-6 bg-beige-50" ref={scrollRef}>
+        {/* ✅ CHAT MESSAGES AREA */}
+        <ScrollArea className="flex-1 p-4 md:p-6 bg-gradient-light" ref={scrollRef}>
           <div className="space-y-4 max-w-3xl mx-auto pb-4">
+            {displayMessages.length === 1 && !selectedSubject && (
+              // ✅ EMPTY STATE - RESOLVE AQUELE ESPAÇO BRANCO CRÍTICO!
+              <div className="h-96 flex items-center justify-center">
+                <div className="text-center space-y-6 w-full px-4">
+                  {/* ✅ ILUSTRAÇÃO / ÍCONE PRINCIPAL */}
+                  <div className="flex justify-center">
+                    <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-darkBlue-100 to-purple-100 flex items-center justify-center shadow-lg">
+                      <BookOpen className="h-12 w-12 text-darkBlue-600" />
+                    </div>
+                  </div>
+
+                  {/* ✅ TEXTO PRINCIPAL */}
+                  <div>
+                    <h3 className="text-2xl font-bold text-darkBlue-700 mb-2">
+                      Bem-vindo ao Gerador de Flashcards!
+                    </h3>
+                    <p className="text-darkBlue-600 text-sm leading-relaxed max-w-sm mx-auto">
+                      Selecione uma matéria no painel ao lado e comece a criar flashcards inteligentes com a IA
+                    </p>
+                  </div>
+
+                  {/* ✅ CARDS DE SUGESTÃO RÁPIDA */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4">
+                    {subjects.slice(0, 4).map((subject) => (
+                      <button
+                        key={subject.id}
+                        onClick={() => setSelectedSubject(subject.id)}
+                        className="p-4 rounded-xl bg-white border-2 border-beige-200 hover:border-darkBlue-500 hover:shadow-card-hover transition-all duration-300 group text-left"
+                      >
+                        <p className="font-semibold text-darkBlue-700 text-sm group-hover:text-darkBlue-600 flex items-center justify-between">
+                          {subject.name}
+                          <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-1" />
+                        </p>
+                        <p className="text-xs text-darkBlue-500 mt-1">Clique para começar</p>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* ✅ DIVIDER */}
+                  <div className="pt-2">
+                    <div className="h-px bg-gradient-to-r from-transparent via-beige-300 to-transparent"></div>
+                  </div>
+
+                  {/* ✅ INFO BOX */}
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg text-left">
+                    <p className="text-xs text-blue-700 font-semibold mb-2">💡 Como Funciona</p>
+                    <ul className="text-xs text-blue-600 space-y-1">
+                      <li>✨ Escolha uma matéria</li>
+                      <li>✍️ Descreva o conteúdo</li>
+                      <li>🤖 A IA cria flashcards automáticos</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ MENSAGENS DO CHAT */}
             {displayMessages.map((msg) => (
               <div
                 key={msg.id}
                 className={cn(
-                  'flex w-full gap-3',
+                  'flex w-full gap-3 animate-slide-up',
                   msg.role === 'user' ? 'justify-end' : 'justify-start',
                 )}
               >
                 {msg.role === 'ai' && (
-                  <div className="w-8 h-8 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
-                    <BotMessageSquare className="h-4 w-4 text-darkBlue-500" />
+                  <div className="w-9 h-9 rounded-xl bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
+                    <BotMessageSquare className="h-5 w-5 text-darkBlue-500" />
                   </div>
                 )}
                 <div
                   className={cn(
-                    'max-w-[85%] md:max-w-[75%] rounded-xl px-4 py-3 text-sm md:text-base leading-relaxed shadow-sm',
+                    'max-w-[85%] md:max-w-[70%] rounded-2xl px-5 py-3.5 text-sm md:text-base leading-relaxed shadow-card transition-all duration-300',
                     msg.role === 'user'
-                      ? 'bg-darkBlue-500 text-white rounded-br-sm'
-                      : 'bg-beige-100 text-darkBlue-700 rounded-bl-sm',
+                      ? 'bg-gradient-primary text-white rounded-br-sm hover:shadow-card-hover'
+                      : 'bg-white text-darkBlue-700 border border-beige-200 rounded-bl-sm hover:shadow-card-hover hover:border-beige-300',
                   )}
                 >
                   {msg.content.split('\n').map((line, j) => (
@@ -526,19 +632,20 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
               </div>
             ))}
 
+            {/* ✅ LOADING STATE - ANIMAÇÃO */}
             {isLoading && (
-              <div className="flex w-full gap-3 justify-start animate-pulse">
-                <div className="w-8 h-8 rounded-full bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
-                  <BotMessageSquare className="h-4 w-4 text-darkBlue-500" />
+              <div className="flex w-full gap-3 justify-start animate-slide-up">
+                <div className="w-9 h-9 rounded-xl bg-darkBlue-500/10 flex items-center justify-center shrink-0 mt-auto">
+                  <BotMessageSquare className="h-5 w-5 text-darkBlue-500" />
                 </div>
-                <div className="bg-beige-100 rounded-xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center shadow-sm">
-                  <div className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"></div>
+                <div className="bg-white border border-beige-200 rounded-2xl rounded-bl-sm px-5 py-3 flex gap-2 items-center shadow-card">
+                  <div className="w-2.5 h-2.5 rounded-full bg-darkBlue-500/60 animate-bounce"></div>
                   <div
-                    className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"
+                    className="w-2.5 h-2.5 rounded-full bg-darkBlue-500/60 animate-bounce"
                     style={{ animationDelay: '0.2s' }}
                   ></div>
                   <div
-                    className="w-2 h-2 rounded-full bg-darkBlue-500/40 animate-bounce"
+                    className="w-2.5 h-2.5 rounded-full bg-darkBlue-500/60 animate-bounce"
                     style={{ animationDelay: '0.4s' }}
                   ></div>
                 </div>
@@ -547,7 +654,8 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
           </div>
         </ScrollArea>
 
-        <div className="p-4 border-t border-beige-300 bg-white shrink-0">
+        {/* ✅ INPUT FOOTER */}
+        <div className="p-4 border-t border-beige-200 bg-white/80 backdrop-blur-md shrink-0 shadow-elevation">
           <div className="max-w-3xl mx-auto">
             <form
               onSubmit={(e) => {
@@ -556,55 +664,70 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
               }}
               className="flex gap-2 items-end"
             >
-              <Input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                placeholder={selectedSubject ? "Descreva o conteúdo..." : "Selecione a matéria antes..."}
-                className="rounded-xl h-12 bg-beige-50 border-beige-300 focus-visible:ring-darkBlue-500 shadow-sm text-darkBlue-700"
-                disabled={!selectedSubject || isLoading}
-              />
+              <div className="flex-1 relative">
+                <Input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                  placeholder={selectedSubject ? "Descreva o conteúdo..." : "Selecione a matéria antes..."}
+                  className="w-full px-5 py-3 rounded-xl h-12 bg-beige-50 border-2 border-beige-200 focus:border-darkBlue-500 focus:outline-none focus:ring-2 focus:ring-darkBlue-200 transition-all duration-300 text-darkBlue-700 placeholder-darkBlue-400 text-base font-medium shadow-sm hover:border-beige-300"
+                  disabled={!selectedSubject || isLoading}
+                />
+              </div>
               <Button
                 type="submit"
                 size="icon"
-                className="h-12 w-12 rounded-xl shrink-0 shadow-sm bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+                className="h-12 w-12 rounded-xl shrink-0 shadow-md bg-gradient-primary hover:shadow-lg hover:scale-105 active:scale-95 text-white transition-all duration-300"
                 disabled={!input.trim() || isLoading || !selectedSubject}
               >
                 <Send className="h-5 w-5" />
               </Button>
             </form>
+            <p className="text-xs text-darkBlue-500 mt-2 px-5">
+              💡 Dica: Seja descritivo e o IA criará flashcards melhores!
+            </p>
           </div>
         </div>
       </div>
 
+      {/* ✅ TEMPLATE DIALOG - Modernizado */}
       <Dialog open={showTemplate} onOpenChange={setShowTemplate}>
-        <DialogContent className="sm:max-w-[600px] bg-white border-beige-300 text-darkBlue-700">
+        <DialogContent className="sm:max-w-[650px] bg-white border-beige-300 text-darkBlue-700 rounded-2xl shadow-lg">
           <DialogHeader>
-            <DialogTitle className="text-darkBlue-700 flex items-center gap-2">
-              <Lightbulb className="h-5 w-5" />
+            <DialogTitle className="text-darkBlue-700 flex items-center gap-2 text-xl font-bold">
+              <Lightbulb className="h-6 w-6 text-yellow-500" />
               Como pedir flashcards eficientes sobre {currentTemplate?.subjectName}
             </DialogTitle>
-            <DialogDescription className="text-darkBlue-500">
+            <DialogDescription className="text-darkBlue-600 font-medium">
               Siga este formato para extrair o máximo da IA:
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-beige-50 p-4 rounded-lg border border-beige-300">
-              <p className="text-sm font-semibold text-darkBlue-700 mb-3">📝 Template sugerido:</p>
-              <p className="text-sm text-darkBlue-700 whitespace-pre-wrap font-mono bg-white p-3 rounded border border-beige-200">
+            {/* ✅ TEMPLATE BOX */}
+            <div className="bg-gradient-soft p-5 rounded-xl border-2 border-darkBlue-200">
+              <p className="text-sm font-bold text-darkBlue-700 mb-3 flex items-center gap-2">
+                📝 Template Sugerido
+              </p>
+              <p className="text-sm text-darkBlue-700 whitespace-pre-wrap font-mono bg-white p-4 rounded-lg border border-beige-200 shadow-sm">
                 {currentTemplate?.template}
               </p>
             </div>
 
-            <div className="bg-green-50 p-4 rounded-lg border border-green-300">
-              <p className="text-sm font-semibold text-green-700 mb-2">✅ Dica prática:</p>
-              <p className="text-sm text-green-700">{currentTemplate?.example}</p>
+            {/* ✅ EXAMPLE BOX */}
+            <div className="bg-emerald-50 p-5 rounded-xl border-2 border-emerald-300">
+              <p className="text-sm font-bold text-emerald-700 mb-2 flex items-center gap-2">
+                ✅ Dica Prática
+              </p>
+              <p className="text-sm text-emerald-700">{currentTemplate?.example}</p>
             </div>
 
-            <div className="bg-blue-50 p-4 rounded-lg border border-blue-300">
-              <p className="text-sm font-semibold text-blue-700 mb-2">💡 Por que funciona:</p>
-              <p className="text-sm text-blue-700">
+            {/* ✅ WHY IT WORKS BOX */}
+            <div className="bg-sky-50 p-5 rounded-xl border-2 border-sky-300">
+              <p className="text-sm font-bold text-sky-700 mb-2 flex items-center gap-2">
+                💡 Por que Funciona
+              </p>
+              <p className="text-sm text-sky-700 leading-relaxed">
                 Ao seguir este padrão, a IA entende exatamente qual é o contexto e o nível de
                 profundidade que você precisa, gerando flashcards mais relevantes e focados.
               </p>
@@ -614,9 +737,9 @@ Varie sugestões com base no histórico. Se não for necessário, não sugira.`
           <DialogFooter>
             <Button
               onClick={() => setShowTemplate(false)}
-              className="bg-darkBlue-500 hover:bg-darkBlue-600 text-white"
+              className="bg-gradient-primary hover:shadow-lg text-white font-semibold w-full rounded-xl h-11 transition-all duration-300 hover:scale-105"
             >
-              Entendido! Fechar
+              Entendi! Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
